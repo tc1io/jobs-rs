@@ -1,14 +1,18 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub struct JobManager{}
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+impl JobManager {
+    pub fn new() -> Self {
+        Self{}
+    }
+
+    pub fn register(&mut self) {
+
+    }
+
+
+    pub async fn run(&mut self) -> Result<(), i32> {
+        println!("Run");
+        Ok(())
     }
 }
