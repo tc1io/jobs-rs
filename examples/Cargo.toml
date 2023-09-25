@@ -1,0 +1,16 @@
+[package]
+name = "examples"
+version = "0.0.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal"] }
+jobs = { version = "0.1.0", path = "../"}
+futures = { version = "0.3", default-features = false }
+pickledb = "0.5.1"
+
+[[example]]
+name = "simple"
+path = "simple.rs"

@@ -17,3 +17,12 @@ Cargo.lock
 # Added by cargo
 
 /target
+
+# MSVC Windows builds of rustc generate these, which store debugging information
+*.pdb
+
+.idea
+.vscode
+.DS_Store
+
+example.db
