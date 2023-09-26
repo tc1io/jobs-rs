@@ -3,6 +3,7 @@ use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::fmt::Error;
 
 use mongodb::bson::{self, doc, Document};
+use mongodb::options::FindOneOptions;
 use serde::{Deserialize, Serialize};
 
 #[tokio::main]
@@ -71,8 +72,10 @@ struct JobData {
 }
 
 pub trait Repository {
-    fn create(&self, document: &JobData) -> Result<(), mongodb::error::Error>;
-    fn read(&self, filter: Document) -> Result<Option<MyDocument>, mongodb::error::Error>;
+    async fn create(&self, document: &JobData) -> Result<(), mongodb::error::Error>;
+    async fn read(&self, filter: Document) -> Result<Option<JobData>, mongodb::error::Error>;
+    async fn find_by_jobname(&self, name: &str) -> Result<Option<JobData>, mongodb::error::Error>;
+}
     // fn update(&self, filter: Document, update: Document) -> Result<(), mongodb::error::Error>;
 }
 
@@ -87,11 +90,24 @@ impl DBRepository {
 }
 
 impl Repository for DBRepository {
-    fn create(&self, document: &JobData) -> Result<(), mongodb::error::Error> {
-        self.collection.insert_one(bson::to_document(document)?, None)?;
+    async fn create(&self, jobdata: &JobData) -> Result<(), Error> {
+        let document = bson::to_document(jobdata)?;
+        self.collection.insert_one(document, None).await?;
         Ok(())
     }
-    fn read(&self, filter: Document) -> Result<Option<JobData>, mongodb::error::Error> {
+    async fn read(&self, filter: Document) -> Result<Option<JobData>, mongodb::error::Error> {
         self.collection.find_one(filter, None)?.map(|doc| bson::from_document(doc).unwrap()).transpose()
+    }
+
+    async fn find_by_jobname(&self, name: &str) -> Result<Option<JobData>, Error> {
+        let filter = doc! {"name": name};
+        let options = FindOneOptions::default();
+
+        if let Some(document) = self.collection.find_one(filter, options).await? {
+            let jobdata: JobData = bson::from_document(document)?;
+            Ok(Some(jobdata))
+        } else {
+            Ok(None)
+        }
     }
 }
