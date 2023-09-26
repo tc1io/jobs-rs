@@ -23,7 +23,7 @@ pub struct JobConfig {
 }
 
 pub trait JobsRepo {
-    fn create_job(&mut self, name: String, schedule: Schedule) -> Result<(), Error>;
+    fn create_job(&mut self, name: &str, schedule: Schedule) -> Result<(), Error>;
 }
 
 impl JobManager {
@@ -34,7 +34,7 @@ impl JobManager {
         }
     }
 
-    pub fn register(&mut self, name: String, schedule: Schedule, job: impl Job + 'static) {
+    pub fn register(&mut self, name: &str, schedule: Schedule, job: impl Job + 'static) {
         // let job_config = JobConfig {
         //     job: Box::new(job),
         //     schedule: schedule,

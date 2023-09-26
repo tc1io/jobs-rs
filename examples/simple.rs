@@ -11,6 +11,10 @@ async fn main() {
     );
 
     let repo = DbRepo { db };
+    let schedule = jobs::Schedule {};
+    let foo_job = FooJob {
+        name: "".to_string(),
+    };
 
     // let repo = RedisJobRep::new()
 
@@ -19,7 +23,7 @@ async fn main() {
 
     let mut manager = JobManager::new(repo);
     //
-    // manager.register(job1);
+    manager.register("dummy", schedule, foo_job);
     // manager.register(job2);
     //
     manager.run().await.unwrap();
@@ -30,11 +34,12 @@ pub struct DbRepo {
 }
 
 impl JobsRepo for DbRepo {
-    fn create_job(&mut self, name: String, schedule: jobs::Schedule) -> Result<(), Error> {
+    fn create_job(&mut self, name: &str, schedule: jobs::Schedule) -> Result<(), Error> {
         // TODO: do it without jobs ext - jobs::Schedule
         println!("create_job");
         self.db.set("key1", &100).unwrap();
-        todo!()
+        Ok(())
+        // todo!()
     }
 }
 
@@ -44,7 +49,6 @@ pub struct FooJob {
 
 impl jobs::Job for FooJob {
     fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
-        println!("inside call");
         let state = Vec::<u8>::new();
         Ok(state)
     }
