@@ -72,6 +72,8 @@ struct JobData {
 
 pub trait Repository {
     fn create(&self, document: &JobData) -> Result<(), mongodb::error::Error>;
+    fn read(&self, filter: Document) -> Result<Option<MyDocument>, mongodb::error::Error>;
+    // fn update(&self, filter: Document, update: Document) -> Result<(), mongodb::error::Error>;
 }
 
 pub struct DBRepository {
@@ -88,5 +90,8 @@ impl Repository for DBRepository {
     fn create(&self, document: &JobData) -> Result<(), mongodb::error::Error> {
         self.collection.insert_one(bson::to_document(document)?, None)?;
         Ok(())
+    }
+    fn read(&self, filter: Document) -> Result<Option<JobData>, mongodb::error::Error> {
+        self.collection.find_one(filter, None)?.map(|doc| bson::from_document(doc).unwrap()).transpose()
     }
 }
