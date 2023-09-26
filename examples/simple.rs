@@ -1,6 +1,8 @@
-use jobs::{Job, JobManager, JobsRepo, Schedule};
+use jobs::{Job, JobConfig, JobManager, JobsRepo, Schedule};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::fmt::Error;
+use std::future::Future;
+use std::pin::Pin;
 
 #[tokio::main]
 async fn main() {
@@ -11,7 +13,9 @@ async fn main() {
     );
 
     let repo = DbRepo { db };
-    let schedule = jobs::Schedule {};
+    let schedule = Schedule {
+        expr: "* * * 3 * * *".to_string(),
+    };
     let foo_job = FooJob {
         name: "".to_string(),
     };
@@ -23,7 +27,7 @@ async fn main() {
 
     let mut manager = JobManager::new(repo);
     //
-    manager.register("dummy", schedule, foo_job);
+    manager.register("dummy".to_string(), schedule, foo_job);
     // manager.register(job2);
     //
     manager.run().await.unwrap();
@@ -34,22 +38,29 @@ pub struct DbRepo {
 }
 
 impl JobsRepo for DbRepo {
-    fn create_job(&mut self, name: &str, schedule: jobs::Schedule) -> Result<(), Error> {
+    fn create_job(&mut self, jc: JobConfig) -> Result<bool, Error> {
         // TODO: do it without jobs ext - jobs::Schedule
         println!("create_job");
-        self.db.set("key1", &100).unwrap();
-        Ok(())
+        let name = jc.name;
+        self.db.set(name.as_str(), &jc.schedule).unwrap();
+        Ok(true)
         // todo!()
     }
-}
 
-pub struct FooJob {
+    fn get_job_config(&mut self, name: &str) -> Result<Option<jobs::JobConfig>, Error> {
+        todo!()
+    }
+}
+struct FooJob {
     name: String,
 }
 
-impl jobs::Job for FooJob {
-    fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
-        let state = Vec::<u8>::new();
-        Ok(state)
+impl Job for FooJob {
+    // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
+    fn call(&self, state: Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>> {
+        Box::pin(async move {
+            let state = Vec::<u8>::new();
+            Ok(state)
+        })
     }
 }
