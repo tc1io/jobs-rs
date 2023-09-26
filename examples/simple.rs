@@ -75,7 +75,6 @@ pub trait Repository {
     async fn create(&self, document: &JobData) -> Result<(), mongodb::error::Error>;
     async fn read(&self, filter: Document) -> Result<Option<JobData>, mongodb::error::Error>;
     async fn find_by_jobname(&self, name: &str) -> Result<Option<JobData>, mongodb::error::Error>;
-}
     // fn update(&self, filter: Document, update: Document) -> Result<(), mongodb::error::Error>;
 }
 
