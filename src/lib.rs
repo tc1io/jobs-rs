@@ -3,6 +3,7 @@
 // func(context.Context, state []byte) ([]byte, error)
 
 use std::fmt::Error;
+use example;
 
 pub struct Schedule {}
 
@@ -13,6 +14,7 @@ pub trait Job {
 pub struct JobManager {
     job_repo: Box<dyn JobsRepo>,
     job: Option<Box<dyn Job>>,
+    db_repo: ox<dyn Repository>
     // schedule: Schedule,
     // config: Option<JobConfig>,
 }
@@ -27,10 +29,11 @@ pub trait JobsRepo {
 }
 
 impl JobManager {
-    pub fn new(job_repo: impl JobsRepo + 'static) -> Self {
+    pub fn new(job_repo: impl JobsRepo + 'static, db_repo: impl Repository + 'static ) -> Self {
         Self {
             job_repo: Box::new(job_repo),
             job: None,
+            db_repo: Box::new(db_repo),
         }
     }
 
@@ -46,7 +49,7 @@ impl JobManager {
 
     pub async fn run(&mut self) -> Result<(), i32> {
         println!("Run");
-
+        self.db_repo.
         // From DB...
         let state = Vec::<u8>::new();
         let j = self.job.as_mut().unwrap().call(state).unwrap();
