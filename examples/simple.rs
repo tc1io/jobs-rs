@@ -1,4 +1,4 @@
-use jobs::{Job, JobConfig, JobManager, JobsRepo, Schedule};
+use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::fmt::Error;
 use std::future::Future;
@@ -38,16 +38,16 @@ pub struct DbRepo {
 }
 
 impl JobsRepo for DbRepo {
-    fn create_job(&mut self, jc: JobConfig) -> Result<bool, Error> {
+    fn create_job(&mut self, ji: JobInfo) -> Result<bool, Error> {
         // TODO: do it without jobs ext - jobs::Schedule
         println!("create_job");
-        let name = jc.name;
-        self.db.set(name.as_str(), &jc.schedule).unwrap();
+        let name = &ji.name;
+        self.db.set(name.as_str(), &ji).unwrap();
         Ok(true)
         // todo!()
     }
 
-    fn get_job_config(&mut self, name: &str) -> Result<Option<jobs::JobConfig>, Error> {
+    fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error> {
         todo!()
     }
 }
