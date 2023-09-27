@@ -34,12 +34,14 @@ pub struct JobManager {
 pub struct JobInfo {
     pub name: String,
     pub schedule: Schedule,
+    pub state: Vec<u8>,
 }
 
 #[async_trait]
 pub trait JobsRepo {
     async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, Error>;
-    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error>;
+    async fn get_job_info(&mut self, name: String) -> Result<Option<JobInfo>, Error>;
+    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error>;
 }
 
 impl JobManager {
@@ -52,16 +54,24 @@ impl JobManager {
     }
 
     pub async fn register(&mut self, name: String, schedule: Schedule, job: impl Job + 'static) {
-        let job_info = JobInfo { name, schedule };
+        let state = Vec::<u8>::new();
+        let job_info = JobInfo {
+            name,
+            schedule,
+            state,
+        };
         self.job = Some(Rc::new(job));
+        self.job_info = Some(job_info.clone());
         self.job_repo
             .create_job(job_info)
             .await
             .expect("TODO: panic message");
     }
 
-    pub async fn run(&self) -> Result<(), i32> {
+    pub async fn run(&mut self) -> Result<(), Error> {
         println!("Run");
+
+        let ji = self.job_info.as_ref().unwrap();
 
         // get job info from db
 
@@ -69,11 +79,16 @@ impl JobManager {
 
         // From DB...
         let state = Vec::<u8>::new();
-        let j = self
+        let new_state = self
             .job
             .as_ref()
             .unwrap()
-            .call(state.clone())
+            .call(ji.clone().state)
+            .await
+            .unwrap();
+        self.job_repo
+            .as_mut()
+            .save_state(ji.clone().name, new_state)
             .await
             .unwrap();
 

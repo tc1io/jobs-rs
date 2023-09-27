@@ -21,18 +21,10 @@ async fn main() {
         name: "".to_string(),
     };
 
-    // let repo = RedisJobRep::new()
-
-    // let job1 = ???;
-    // let job2 = ???;
-
     let mut manager = JobManager::new(repo);
-    //
     manager
         .register("dummy".to_string(), schedule, foo_job)
         .await;
-    // manager.register(job2);
-    //
     manager.run().await.unwrap();
 }
 
@@ -51,8 +43,15 @@ impl JobsRepo for DbRepo {
         // todo!()
     }
 
-    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error> {
+    async fn get_job_info(&mut self, name: String) -> Result<Option<JobInfo>, Error> {
         todo!()
+    }
+
+    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error> {
+        let mut job = self.get_job_info(name.clone()).await.unwrap().unwrap();
+        job.state = state;
+        self.db.set(name.as_str(), &job).unwrap();
+        Ok(true)
     }
 }
 struct FooJob {
@@ -62,9 +61,6 @@ struct FooJob {
 impl Job for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
     fn call(&self, state: Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>> {
-        Box::pin(async move {
-            let state = Vec::<u8>::new();
-            Ok(state)
-        })
+        Box::pin(async move { Ok(state) })
     }
 }
