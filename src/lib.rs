@@ -2,6 +2,7 @@
 
 // func(context.Context, state []byte) ([]byte, error)
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt::Error;
 use std::future::Future;
@@ -35,9 +36,10 @@ pub struct JobInfo {
     pub schedule: Schedule,
 }
 
+#[async_trait]
 pub trait JobsRepo {
-    fn create_job(&mut self, job_info: JobInfo) -> Result<bool, Error>;
-    fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error>;
+    async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, Error>;
+    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error>;
 }
 
 impl JobManager {

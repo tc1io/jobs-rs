@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::fmt::Error;
@@ -37,8 +38,9 @@ pub struct DbRepo {
     db: PickleDb,
 }
 
+#[async_trait]
 impl JobsRepo for DbRepo {
-    fn create_job(&mut self, ji: JobInfo) -> Result<bool, Error> {
+    async fn create_job(&mut self, ji: JobInfo) -> Result<bool, Error> {
         // TODO: do it without jobs ext - jobs::Schedule
         println!("create_job");
         let name = &ji.name;
@@ -47,7 +49,7 @@ impl JobsRepo for DbRepo {
         // todo!()
     }
 
-    fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error> {
+    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error> {
         todo!()
     }
 }
