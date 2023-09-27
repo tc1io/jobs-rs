@@ -52,7 +52,12 @@ impl JobsRepo for DbRepo {
     }
 
     async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error> {
-        todo!()
+        if let Some(value) = self.db.get(name).unwrap() {
+            Ok(value)
+        } else {
+            Ok(None)
+        }
+        // Ok(value)
     }
 }
 struct FooJob {

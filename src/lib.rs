@@ -8,6 +8,7 @@ use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::fmt;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Schedule {
@@ -36,6 +37,20 @@ pub struct JobInfo {
     pub schedule: Schedule,
 }
 
+impl fmt::Display for JobInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Customize how JobInfo is formatted as a string here
+        write!(f, "name: {}, schedule {}" , self.name, self.schedule.expr)
+    }
+}
+
+impl fmt::Display for Schedule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Customize how JobInfo is formatted as a string here
+        write!(f, "expr: {}", self.expr)
+    }
+}
+
 #[async_trait]
 pub trait JobsRepo {
     async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, Error>;
@@ -52,12 +67,18 @@ impl JobManager {
     }
 
     pub async fn register(&mut self, name: String, schedule: Schedule, job: impl Job + 'static) {
+        let name1 = name.clone();
         let job_info = JobInfo { name, schedule };
         self.job = Some(Rc::new(job));
         self.job_repo
             .create_job(job_info)
             .await
             .expect("TODO: panic message");
+
+        match self.job_repo.get_job_info(name1.as_str()).await.expect("TODO: panic message") {
+            Some(result) => println!("Result:{} ", result),
+            None => println!("job not found!"),
+        }
     }
 
     pub async fn run(&self) -> Result<(), i32> {
