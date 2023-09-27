@@ -28,7 +28,9 @@ async fn main() {
 
     let mut manager = JobManager::new(repo);
     //
-    manager.register("dummy".to_string(), schedule, foo_job);
+    manager
+        .register("dummy".to_string(), schedule, foo_job)
+        .await;
     // manager.register(job2);
     //
     manager.run().await.unwrap();

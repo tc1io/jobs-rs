@@ -51,10 +51,13 @@ impl JobManager {
         }
     }
 
-    pub fn register(&mut self, name: String, schedule: Schedule, job: impl Job + 'static) {
+    pub async fn register(&mut self, name: String, schedule: Schedule, job: impl Job + 'static) {
         let job_info = JobInfo { name, schedule };
         self.job = Some(Rc::new(job));
-        self.job_repo.create_job(job_info);
+        self.job_repo
+            .create_job(job_info)
+            .await
+            .expect("TODO: panic message");
     }
 
     pub async fn run(&self) -> Result<(), i32> {
