@@ -1,25 +1,20 @@
-use jobs::{Job, JobManager, JobsRepo, Schedule};
-use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
+use jobs::{Job, JobConfig, JobManager, JobsRepo, Schedule};
 use std::fmt::Error;
 
 use mongodb::bson::{self, doc, Document};
+use mongodb::Collection;
 use mongodb::options::FindOneOptions;
+use jobs::JobData;
 use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() {
-    let mut db = PickleDb::new(
-        "example.db",
-        PickleDbDumpPolicy::AutoDump,
-        SerializationMethod::Json,
-    );
 
-    let repo = DbRepo { db };
-
-    let client = mongodb::Client::with_uri_str("mongodb://localhost:27017").unwrap();
-    let db = client.database("my_database");
-    let collection = db.collection("my_collection");
-    let repository = DBRepository::new(collection);
+    let client = mongodb::Client::with_uri_str("mongodb://localhost:27017").await.unwrap();
+    println!("db connection ....");
+    let db = client.database("xxx_db");
+    let collection = db.collection("xxx_collection");
+    let repo = DBRepository::new(collection);
 
 
     let schedule = jobs::Schedule {};
@@ -32,26 +27,12 @@ async fn main() {
     // let job1 = ???;
     // let job2 = ???;
 
-    let mut manager = JobManager::new(repo,repository );
+    let mut manager = JobManager::new(repo );
     //
     manager.register("dummy", schedule, foo_job);
     // manager.register(job2);
     //
     manager.run().await.unwrap();
-}
-
-pub struct DbRepo {
-    db: PickleDb,
-}
-
-impl JobsRepo for DbRepo {
-    fn create_job(&mut self, name: &str, schedule: jobs::Schedule) -> Result<(), Error> {
-        // TODO: do it without jobs ext - jobs::Schedule
-        println!("create_job");
-        self.db.set("key1", &100).unwrap();
-        Ok(())
-        // todo!()
-    }
 }
 
 pub struct FooJob {
@@ -65,48 +46,37 @@ impl jobs::Job for FooJob {
     }
 }
 
-struct JobData {
-    // Define your document fields here
-    name: String,
-    // state: String,
-}
-
-pub trait Repository {
-    async fn create(&self, document: &JobData) -> Result<(), mongodb::error::Error>;
-    async fn read(&self, filter: Document) -> Result<Option<JobData>, mongodb::error::Error>;
-    async fn find_by_jobname(&self, name: &str) -> Result<Option<JobData>, mongodb::error::Error>;
-    // fn update(&self, filter: Document, update: Document) -> Result<(), mongodb::error::Error>;
-}
-
 pub struct DBRepository {
-    collection: mongodb::Collection<T>,
+    collection: mongodb::Collection<bson::Document>
 }
 
 impl DBRepository {
-    pub fn new(collection: mongodb::Collection<T>) -> Self {
+    pub fn new(collection: mongodb::Collection<bson::Document>) -> Self {
         DBRepository { collection }
     }
 }
 
-impl Repository for DBRepository {
-    async fn create(&self, jobdata: &JobData) -> Result<(), Error> {
-        let document = bson::to_document(jobdata)?;
-        self.collection.insert_one(document, None).await?;
+impl JobsRepo for DBRepository {
+    fn create_job(&mut self, name: &str, schedule: Schedule) -> Result<(), Error> {
+        todo!()
+    }
+    fn create(&self, jd: &JobData) -> Result<(), mongodb::error::Error> {
+        let document = bson::to_document(jd)?;
+        self.collection.insert_one(document, None);
         Ok(())
     }
-    async fn read(&self, filter: Document) -> Result<Option<JobData>, mongodb::error::Error> {
-        self.collection.find_one(filter, None)?.map(|doc| bson::from_document(doc).unwrap()).transpose()
-    }
+    // fn read(&self, filter: Document) -> Result<Option<JobData>, mongodb::error::Error> {
+    //     self.collection.find_one(filter, None)?.map(|doc| bson::from_document(doc).unwrap()).transpose()
+    // }
 
-    async fn find_by_jobname(&self, name: &str) -> Result<Option<JobData>, Error> {
-        let filter = doc! {"name": name};
-        let options = FindOneOptions::default();
-
-        if let Some(document) = self.collection.find_one(filter, options).await? {
-            let jobdata: JobData = bson::from_document(document)?;
-            Ok(Some(jobdata))
-        } else {
-            Ok(None)
-        }
+     // fn find_by_jobname(&self, name: &str) -> Result<Option<JobData>, mongodb::error::Error> {
+     //    let filter = doc! {"name": name};
+     //    let options = FindOneOptions::default();
+     //
+     //    if let Some(document) = self.collection.find_one(filter, options).{
+     //        let jobdata: JobData = bson::from_document(document).unwrap();
+     //        Ok(Some(jobdata))
+     //    } else {
+     //        Ok(None)
+     //    }
     }
-}
