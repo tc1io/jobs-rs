@@ -9,7 +9,9 @@ edition = "2021"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal"] }
 jobs = { version = "0.1.0", path = "../"}
 futures = { version = "0.3", default-features = false }
-pickledb = "0.5.1"
+#pickledb = "0.5.1"
+mongodb = "2.6.0"
+async-trait = "0.1"
 
 [[example]]
 name = "simple"
