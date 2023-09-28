@@ -14,6 +14,7 @@ async fn main() {
     );
 
     let repo = DbRepo { db };
+
     let schedule = Schedule {
         expr: "* * * 3 * * *".to_string(),
     };
@@ -52,12 +53,11 @@ impl JobsRepo for DbRepo {
     }
 
     async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error> {
-        if let Some(value) = self.db.get(name).unwrap() {
+        if let Some(value) = self.db.get("dummy").unwrap() {
             Ok(value)
         } else {
             Ok(None)
         }
-        // Ok(value)
     }
 }
 struct FooJob {
