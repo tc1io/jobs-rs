@@ -4,6 +4,8 @@ use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
+use std::thread;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() {
@@ -45,7 +47,7 @@ impl JobsRepo for DbRepo {
     }
 
     async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error> {
-        if let Some(value) = self.db.get("dummy").unwrap() {
+        if let Some(value) = self.db.get(name) {
             Ok(value)
         } else {
             Ok(None)
@@ -53,9 +55,14 @@ impl JobsRepo for DbRepo {
     }
 
     async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error> {
-        let mut job = self.get_job_info(name.as_str().clone()).await.unwrap().unwrap();
+        let mut job = self
+            .get_job_info(name.as_str().clone())
+            .await
+            .unwrap()
+            .unwrap();
         job.state = state;
         self.db.set(name.as_str(), &job).unwrap();
+        println!("state saved");
         Ok(true)
     }
 }
@@ -67,6 +74,9 @@ struct FooJob {
 impl Job for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
     async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
+        println!("starting job");
+        thread::sleep(Duration::from_secs(2));
+        println!("finising job");
         Ok(state)
     }
 }
