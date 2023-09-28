@@ -26,8 +26,8 @@ pub trait Job {
 }
 
 pub struct JobManager {
-    pub job_repo: Box<dyn JobsRepo>,
-    job: Option<Rc<dyn Job>>,
+    pub job_repo: Box<dyn JobsRepo + Sync + Send + 'static>,
+    job: Option<Arc<dyn Job + Sync + Send + 'static>>,
     job_info: Option<JobInfo>,
 }
 
@@ -65,7 +65,7 @@ pub trait JobsRepo {
 }
 
 impl JobManager {
-    pub fn new(job_repo: impl JobsRepo + 'static) -> Self {
+    pub fn new(job_repo: impl JobsRepo + Sync + Send + 'static) -> Self {
         Self {
             job_repo: Box::new(job_repo),
             job_info: None,
@@ -73,7 +73,12 @@ impl JobManager {
         }
     }
 
-    pub async fn register(&mut self, name: String, schedule: Schedule, job: impl Job + 'static) {
+    pub async fn register(
+        &mut self,
+        name: String,
+        schedule: Schedule,
+        job: impl Job + Sync + Send + 'static,
+    ) {
         let name1 = name.clone();
         // let job_info = JobInfo { name, schedule, state: vec![] };
         //
@@ -101,7 +106,7 @@ impl JobManager {
             None => println!("job not found!"),
         }
 
-        self.job = Some(Rc::new(job));
+        self.job = Some(Arc::new(job));
         self.job_info = Some(job_info.clone());
         self.job_repo
             .create_job(job_info)
@@ -111,59 +116,50 @@ impl JobManager {
 
     pub async fn run(&mut self) -> Result<(), Error> {
         println!("Run");
-        let job = self.job.as_ref().unwrap();
-        let ji = self.job_info.as_ref().unwrap();
+        let job = self.job.as_ref().unwrap().clone();
+        let ji = self.job_info.as_ref().unwrap().clone();
+        let xx = job.clone();
 
-        // let (tx1, rx1) = oneshot::channel();
-        // let (tx2, rx2) = oneshot::channel();
+        let (tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
 
-        let handle = tokio::spawn(async {
+        let lock_handle = tokio::spawn(async move {
             lock_refresher().await.expect("TODO: panic message");
+            let _ = tx1.send("done");
         });
 
-        // if not present - return to caller
+        let job_handle = tokio::spawn(async move {
+            let new_state = job.clone().call(ji.clone().state).await.unwrap();
+            let _ = tx2.send("done");
+        });
+        // self.job_repo
+        //     .as_mut()
+        //     .save_state(ji.clone().name, new_state)
+        //     .await
+        //     .unwrap();
 
-        // From DB...
-        let new_state = self
-            .job
-            .as_ref()
-            .unwrap()
-            .call(ji.clone().state)
-            .await
-            .unwrap();
-        self.job_repo
-            .as_mut()
-            .save_state(ji.clone().name, new_state)
-            .await
-            .unwrap();
-        handle.abort();
-
-        // tokio::select! {
-        //     val = rx1 => {
-        //         println!("rx1 completed first with {:?}", val);
-        //     }
-        //     val = rx2 => {
-        //         println!("rx2 completed first with {:?}", val);
-        //     }
-        // }
-        // handle.abort();
-
+        tokio::select! {
+            val = rx1 => {
+                job_handle.abort();
+                println!("rx1 completed first with {:?}", val);
+            }
+            val = rx2 => {
+                lock_handle.abort();
+                println!("rx2 completed first with {:?}", val);
+            }
+        }
         println!("all done!!!");
-
-        // match job.call(state).await {
-        //     Err(e) => todo!(),
-        //     Ok(s) => todo!(), // save new state
-        // }
-        //
 
         Ok(())
     }
 }
 
 async fn lock_refresher() -> Result<(), Error> {
-    // loop {
-    println!("refreshing lock");
-    sleep(Duration::from_secs(100)).await;
-    // }
+    loop {
+        println!("refreshing lock");
+        sleep(Duration::from_secs(5)).await;
+        // sleep(Duration::from_millis(100));
+        println!("done");
+    }
     Ok(())
 }

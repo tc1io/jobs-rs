@@ -75,7 +75,7 @@ impl Job for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
     async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
         println!("starting job");
-        thread::sleep(Duration::from_secs(2));
+        thread::sleep(Duration::from_secs(10));
         println!("finising job");
         Ok(state)
     }
