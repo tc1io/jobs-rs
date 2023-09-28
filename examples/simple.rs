@@ -14,6 +14,7 @@ async fn main() {
     );
 
     let repo = DbRepo { db };
+
     let schedule = Schedule {
         expr: "* * * 3 * * *".to_string(),
     };
@@ -43,12 +44,16 @@ impl JobsRepo for DbRepo {
         // todo!()
     }
 
-    async fn get_job_info(&mut self, name: String) -> Result<Option<JobInfo>, Error> {
-        todo!()
+    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error> {
+        if let Some(value) = self.db.get("dummy").unwrap() {
+            Ok(value)
+        } else {
+            Ok(None)
+        }
     }
 
     async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error> {
-        let mut job = self.get_job_info(name.clone()).await.unwrap().unwrap();
+        let mut job = self.get_job_info(name.as_str().clone()).await.unwrap().unwrap();
         job.state = state;
         self.db.set(name.as_str(), &job).unwrap();
         Ok(true)
