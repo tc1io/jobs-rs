@@ -58,9 +58,10 @@ struct FooJob {
     name: String,
 }
 
+#[async_trait]
 impl Job for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
-    fn call(&self, state: Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>> {
-        Box::pin(async move { Ok(state) })
+    async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
+        Ok(state)
     }
 }

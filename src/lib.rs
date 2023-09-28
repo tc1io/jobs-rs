@@ -14,9 +14,9 @@ pub struct Schedule {
     pub expr: String,
 }
 
+#[async_trait]
 pub trait Job {
-    // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
-    fn call(&self, state: Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
+    async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
 }
 
 pub struct JobManager {
