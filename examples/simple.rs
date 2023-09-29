@@ -18,9 +18,9 @@ async fn main() {
 
     let repo = DbRepo { db };
 
-    let job_lock = std::sync::Arc::new(jobs::JobLock::new());
+    let job_lock = Arc::new(jobs::JobLock::new());
 
-    let lr = std::sync::Arc::new(job_lock);
+    let lrepo = LockRepo{job_lock};
 
     let schedule = Schedule {
         expr: "* * * 3 * * *".to_string(),
@@ -29,7 +29,7 @@ async fn main() {
         name: "".to_string(),
     };
 
-    let mut manager = JobManager::new(repo, lr);
+    let mut manager = JobManager::new(repo, lrepo);
     manager
         .register("dummy".to_string(), schedule, foo_job)
         .await;
@@ -40,7 +40,7 @@ pub struct DbRepo {
     db: PickleDb,
 }
 
-pub struct LkRepo {
+pub struct LockRepo {
     lrepo: std::sync
 }
 
