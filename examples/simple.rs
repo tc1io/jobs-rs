@@ -35,7 +35,7 @@ async fn main() {
         },
     };
 
-    let mut manager = JobManager::new(repo);
+    let mut manager = JobManager::<DbRepo>::new(repo);
     manager
         .register("dummy".to_string(), schedule, foo_job)
         .await;

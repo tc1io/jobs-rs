@@ -28,8 +28,8 @@ pub trait Job {
     async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
 }
 
-pub struct JobManager {
-    pub job_repo: Box<dyn JobsRepo + Sync + Send + 'static>,
+pub struct JobManager<T> {
+    pub job_repo: T,
     job: Option<Arc<dyn Job + Sync + Send + 'static>>,
     job_info: Option<JobInfo>,
 }
@@ -67,10 +67,10 @@ pub trait JobsRepo {
     async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error>;
 }
 
-impl JobManager {
-    pub fn new(job_repo: impl JobsRepo + Sync + Send + 'static) -> Self {
+impl<T: JobsRepo> JobManager<T> {
+    pub fn new(job_repo: T) -> Self {
         Self {
-            job_repo: Box::new(job_repo),
+            job_repo,
             job_info: None,
             job: None,
         }
