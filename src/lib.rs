@@ -15,6 +15,7 @@ use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Schedule {
     pub expr: String,
@@ -57,12 +58,37 @@ impl fmt::Display for Schedule {
     }
 }
 
+pub struct JobLock {
+    lock: Mutex<()>,
+}
+
+impl JobLock {
+        fn new() -> Self {
+            JobLock {
+                lock: Mutex::new(()),
+            }
+        }
+        async fn lock_refresher() -> Result<(), Error> {
+        loop {
+            println!("refreshing lock");
+            sleep(Duration::from_secs(5)).await;
+            // sleep(Duration::from_millis(100));
+            println!("done");
+        }
+        Ok(())
+    }
+        //
+    // }
+}
+
 #[async_trait]
 pub trait JobsRepo {
     async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, Error>;
     async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error>;
     async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error>;
 }
+
+
 
 impl JobManager {
     pub fn new(job_repo: impl JobsRepo + Sync + Send + 'static) -> Self {
@@ -72,7 +98,6 @@ impl JobManager {
             job: None,
         }
     }
-
     pub async fn register(
         &mut self,
         name: String,
@@ -123,15 +148,24 @@ impl JobManager {
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
 
+        let job_lock = JobLock::new();
+
         let lock_handle = tokio::spawn(async move {
-            lock_refresher().await.expect("TODO: panic message");
-            let _ = tx1.send("done");
+            match job_lock.lock.lock().await {
+                _ => {
+                    println!("lock acquired " );
+                    JobLock::lock_refresher().await.expect("TODO: panic message");
+                    let _ = tx1.send("done");
+                }
+            }
         });
 
         let job_handle = tokio::spawn(async move {
             let new_state = job.clone().call(ji.clone().state).await.unwrap();
             let _ = tx2.send("done");
         });
+
+
         // self.job_repo
         //     .as_mut()
         //     .save_state(ji.clone().name, new_state)
@@ -154,12 +188,12 @@ impl JobManager {
     }
 }
 
-async fn lock_refresher() -> Result<(), Error> {
-    loop {
-        println!("refreshing lock");
-        sleep(Duration::from_secs(5)).await;
-        // sleep(Duration::from_millis(100));
-        println!("done");
-    }
-    Ok(())
-}
+// async fn lock_refresher() -> Result<(), Error> {
+//     loop {
+//         println!("refreshing lock");
+//         sleep(Duration::from_secs(5)).await;
+//         // sleep(Duration::from_millis(100));
+//         println!("done");
+//     }
+//     Ok(())
+// }
