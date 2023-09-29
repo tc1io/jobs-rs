@@ -1,3 +1,4 @@
+// #![feature(unwrap_infallible)]
 // func(context.Context, func(state []byte) error, []byte) ([]byte, error)
 
 // func(context.Context, state []byte) ([]byte, error)
@@ -9,6 +10,15 @@ use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::fmt;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum JobError {
+    #[error("Job not fount in db")]
+    NotFound,
+    #[error("Unknown")]
+    UnknownError
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Schedule {
@@ -55,7 +65,7 @@ impl fmt::Display for Schedule {
 #[async_trait]
 pub trait JobsRepo {
     async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, Error>;
-    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error>;
+    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, JobError>;
     async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error>;
 }
 
@@ -88,9 +98,8 @@ impl JobManager {
         };
 
         match self.job_repo.get_job_info(name1.as_str()).await.expect("TODO: panic message") {
-            // Some(result) => println!("Result:{} ", result),
             Some(result) => println!("Result:{} ", result),
-            None => println!("job not found!"),
+            None => println!("Result not found"),
         }
 
         self.job = Some(Rc::new(job));
@@ -100,9 +109,7 @@ impl JobManager {
             .await
             .expect("TODO: panic message");
 
-
     }
-
     pub async fn run(&mut self) -> Result<(), Error> {
         println!("Run");
 

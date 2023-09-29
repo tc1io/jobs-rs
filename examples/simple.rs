@@ -1,12 +1,12 @@
 use async_trait::async_trait;
-use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule};
+use jobs::{Job, JobError, JobInfo, JobManager, JobsRepo, Schedule};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
 
 #[tokio::main]
-async fn main() {
+async fn main()  {
     let mut db = PickleDb::new(
         "example.db",
         PickleDbDumpPolicy::AutoDump,
@@ -39,16 +39,22 @@ impl JobsRepo for DbRepo {
         // TODO: do it without jobs ext - jobs::Schedule
         println!("create_job");
         let name = &ji.name;
-        self.db.set(name.as_str(), &ji).unwrap();
+        self.db.set(name.as_str(), &ji);
         Ok(true)
         // todo!()
     }
 
-    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error> {
-        if let Some(value) = self.db.get("dummy").unwrap() {
+    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, jobs::JobError> {
+        // if let Ok(Some(value)) = self.db.get("dummy").ok_or(jobs::JobError::NotFound) {
+        //     Ok(value)
+        // } else {
+        //     Err(jobs::JobError::NotFound)
+        // }
+
+        if let Ok(Some(value)) = self.db.get("dummy").ok_or(jobs::JobError::NotFound) {
             Ok(value)
         } else {
-            Ok(None)
+            Err(jobs::JobError::NotFound)
         }
     }
 
