@@ -23,11 +23,11 @@ async fn main() {
         };
         db.set(format!("{:?}", i.clone()).as_str(), &proj).unwrap();
     }
-    let all_data = db.get_all();
-    for a in all_data {
-        let data = db.get::<Project>(&a).unwrap();
-        println!("{:?}", data);
-    }
+    // let all_data = db.get_all();
+    // for a in all_data {
+    //     let data = db.get::<Project>(&a).unwrap();
+    //     println!("{:?}", data);
+    // }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

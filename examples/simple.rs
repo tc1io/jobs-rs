@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
+use serde::{Deserialize, Serialize};
 use std::fmt::Error;
 use tokio::time::{sleep, Duration};
 
@@ -11,6 +12,12 @@ async fn main() {
         PickleDbDumpPolicy::AutoDump,
         SerializationMethod::Json,
     );
+    let mut project_db = PickleDb::load(
+        "project.db",
+        PickleDbDumpPolicy::AutoDump,
+        SerializationMethod::Json,
+    )
+    .unwrap();
 
     let repo = DbRepo { db };
 
@@ -19,6 +26,13 @@ async fn main() {
     };
     let foo_job = FooJob {
         name: "".to_string(),
+        db: project_db,
+        project: Project {
+            name: "".to_string(),
+            id: 0,
+            lifecycle_state: "".to_string(),
+            updated: "".to_string(),
+        },
     };
 
     let mut manager = JobManager::new(repo);
@@ -65,6 +79,16 @@ impl JobsRepo for DbRepo {
 }
 struct FooJob {
     name: String,
+    db: PickleDb,
+    project: Project,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+struct Project {
+    name: String,
+    id: i32,
+    lifecycle_state: String,
+    updated: String,
 }
 
 #[async_trait]
@@ -72,7 +96,20 @@ impl Job for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
     async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
         println!("starting job");
-        sleep(Duration::from_secs(10)).await;
+        let all_data = self.db.get_all();
+        for a in all_data {
+            // println!("inside iterator");
+            let mut data = self.db.get::<Project>(&a).unwrap();
+            if data.lifecycle_state == "DELETED" {
+                data.updated = "DONE".to_string();
+                // self.db
+                //     .set(format!("{:?}", data.id.clone()).as_str(), &data)
+                //     .unwrap();
+                println!("{:?}", data);
+                sleep(Duration::from_secs(100)).await;
+            }
+        }
+        // sleep(Duration::from_secs(10)).await;
         println!("finising job");
         Ok(state)
     }

@@ -12,9 +12,11 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::thread;
+use tokio::runtime::Builder;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
+// use futures::future::{ok, loop_fn, Future, FutureResult, Loop};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Schedule {
@@ -115,33 +117,52 @@ impl JobManager {
 
         // TODO: add get_job_info().......
 
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
+        // let (tx1, rx1) = oneshot::channel();
+        // let (tx2, rx2) = oneshot::channel();
 
-        let lock_handle = tokio::spawn(async move {
-            lock_refresher().await.expect("TODO: panic message");
-            let _ = tx1.send("done");
-        });
+        // let lock_handle = tokio::spawn(async move {
+        let xx = lock_refresher();
+        let yy = job.call(ji.clone().state);
 
-        let job_handle = tokio::spawn(async move {
-            let state = job.clone().call(ji.clone().state).await.unwrap();
-            let _ = tx2.send(state);
-        });
+        // async move{
+        //     xx.await;
+        //     yy.await;
+        // }
+        // let _ = tx1.send("done");
+        // });
 
-        tokio::select! {
-            val = rx1 => {
-                println!("stop signal received from refresh job. stopping job now!!");
-                job_handle.abort();
-                println!("job stopped!!");
+        // let job_handle = tokio::spawn(async move {
+        // let state = job.clone().call(ji.clone().state).await.unwrap();
+        // let _ = tx2.send(state);
+        // });
+
+        let f = tokio::select! {
+            foo = xx => {
+                match foo {
+                    Ok(_) => Err(1),
+                    Err(_) => Err(2),
+                }
             }
-            new_state = rx2 => {
-                let s = new_state.unwrap();
-                println!("stop signal received from job. stopping refresh job now!!");
-                self.job_repo.save_state(name, s.clone()).await.unwrap();
-                lock_handle.abort();
-                println!("refresh job stopped!!");
+            bar = yy => {
+                match bar {
+                    Ok(state) => Ok(state),
+                    Err(_) => Err(4),
+                }
             }
-        }
+            // val = rx1 => {
+            //     println!("stop signal received from refresh job. stopping job now!!");
+            //     job_handle.abort();
+            //     println!("job stopped!!");
+            // }
+            // new_state = rx2 => {
+            //     let s = new_state.unwrap();
+            //     println!("stop signal received from job. stopping refresh job now!!");
+            //     self.job_repo.save_state(name, s.clone()).await.unwrap();
+            //     lock_handle.abort();
+            //     println!("refresh job stopped!!");
+            // }
+        };
+        println!("{:?}", f);
         println!("all done!!!");
 
         Ok(())
@@ -149,12 +170,16 @@ impl JobManager {
 }
 
 async fn lock_refresher() -> Result<(), Error> {
-    // loop {
-    println!("refreshing lock");
-    sleep(Duration::from_secs(5)).await;
-    // Ok(())
-    // sleep(Duration::from_millis(100));
-    // println!("done");
-    // }
+    // use a future loop function instead
+    // use select along with timer
+
+    loop {
+        println!("refreshing lock");
+        // Err(Error::,)
+        sleep(Duration::from_secs(10)).await;
+        // Ok(())
+        // sleep(Duration::from_millis(100));
+        // println!("done");
+    }
     Ok(())
 }
