@@ -3,20 +3,12 @@
 // func(context.Context, state []byte) ([]byte, error)
 
 use async_trait::async_trait;
-use futures::future::err;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::thread;
-use tokio::runtime::Builder;
-use tokio::sync::oneshot;
-use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
-// use futures::future::{ok, loop_fn, Future, FutureResult, Loop};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Schedule {
@@ -25,19 +17,14 @@ pub struct Schedule {
 
 #[async_trait]
 pub trait Job {
-    async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
+    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
 }
 
-pub struct JobManager<R> {
+pub struct JobManager<R, T> {
     pub job_repo: R,
-    job: Option<Arc<dyn Job + Sync + Send + 'static>>,
+    job: Option<T>,
     job_info: Option<JobInfo>,
 }
-
-// #[derive(Clone)]
-// pub struct JobConfig {
-//     pub job: Option<Rc<dyn Job>>,
-// }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct JobInfo {
@@ -67,7 +54,7 @@ pub trait JobsRepo {
     async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error>;
 }
 
-impl<R: JobsRepo> JobManager<R> {
+impl<R: JobsRepo, T: Job> JobManager<R, T> {
     pub fn new(job_repo: R) -> Self {
         Self {
             job_repo,
@@ -76,12 +63,7 @@ impl<R: JobsRepo> JobManager<R> {
         }
     }
 
-    pub async fn register(
-        &mut self,
-        name: String,
-        schedule: Schedule,
-        job: impl Job + Sync + Send + 'static,
-    ) {
+    pub async fn register(&mut self, name: String, schedule: Schedule, job: T) {
         let name1 = name.clone();
 
         let state = Vec::<u8>::new();
@@ -101,7 +83,7 @@ impl<R: JobsRepo> JobManager<R> {
             None => println!("job not found!"),
         }
 
-        self.job = Some(Arc::new(job));
+        self.job = Some(job);
         self.job_info = Some(job_info.clone());
         self.job_repo
             .create_job(job_info)
@@ -111,7 +93,7 @@ impl<R: JobsRepo> JobManager<R> {
 
     pub async fn run(&mut self) -> Result<(), Error> {
         println!("Run");
-        let job = self.job.as_ref().unwrap().clone();
+        // let job = self.job.as_ref().unwrap().clone();
         let ji = self.job_info.as_ref().unwrap().clone();
         let name = ji.clone().name;
 
@@ -122,7 +104,7 @@ impl<R: JobsRepo> JobManager<R> {
 
         // let lock_handle = tokio::spawn(async move {
         let xx = lock_refresher();
-        let yy = job.call(ji.clone().state);
+        let yy = self.job.as_mut().unwrap().call(ji.clone().state);
 
         // async move{
         //     xx.await;

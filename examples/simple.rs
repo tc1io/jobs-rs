@@ -35,7 +35,7 @@ async fn main() {
         },
     };
 
-    let mut manager = JobManager::<DbRepo>::new(repo);
+    let mut manager = JobManager::<DbRepo, FooJob>::new(repo);
     manager
         .register("dummy".to_string(), schedule, foo_job)
         .await;
@@ -94,7 +94,7 @@ struct Project {
 #[async_trait]
 impl Job for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
-    async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
+    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
         println!("starting job");
         let all_data = self.db.get_all();
         for a in all_data {
