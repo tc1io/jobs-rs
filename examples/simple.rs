@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule, LockRepo};
+use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule, LockRepo, LockInfo};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::fmt::Error;
 use std::future::Future;
@@ -55,6 +55,21 @@ impl jobs::LockRepo for LkRepo {
             println!("done");
         }
         Ok(())
+    }
+    async fn add_lock(&mut self, lock: jobs::LockInfo) -> Result<bool, Error> {
+        println!("adding lock");
+        let name = &lock.status;
+        self.lrepo.set(name.as_str(), &lock).unwrap();
+        Ok(true)
+        // todo!()
+    }
+
+    async fn get_lock(&mut self, name: &str) -> Result<Option<jobs::LockInfo>, Error> {
+        if let Some(value) = self.lrepo.get(name) {
+            Ok(value)
+        } else {
+            Ok(None)
+        }
     }
 }
 

@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{fmt, println};
 use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
@@ -41,6 +41,12 @@ pub struct JobInfo {
     pub state: Vec<u8>,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct LockInfo {
+    pub status: String,
+    job_id: String,
+}
+
 impl fmt::Display for JobInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Customize how JobInfo is formatted as a string here
@@ -65,6 +71,8 @@ pub trait JobsRepo {
 #[async_trait]
 pub trait LockRepo {
     async fn lock_refresher1(&self) -> Result<(), Error>;
+    async fn add_lock(&mut self, li: LockInfo) -> Result<bool, Error>;
+    async fn get_lock(&mut self, name: &str) -> Result<Option<LockInfo>, Error>;
 }
 
     impl JobManager {
@@ -115,6 +123,14 @@ pub trait LockRepo {
             .create_job(job_info)
             .await
             .expect("TODO: panic message");
+        let l_info = LockInfo {
+            status: "locked".to_string(),
+            job_id: "dummy".to_string(),
+        };
+        self.lock_repo
+            .add_lock(l_info)
+            .await
+            .expect("TODO: panic message");
     }
 
     pub async fn run(&mut self) -> Result<(), Error> {
@@ -137,6 +153,7 @@ pub trait LockRepo {
             let new_state = job.clone().call(ji.clone().state).await.unwrap();
             let _ = tx2.send("done");
         });
+
 
 
         // self.job_repo
