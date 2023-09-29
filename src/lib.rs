@@ -30,12 +30,9 @@ pub struct JobManager {
     pub job_repo: Box<dyn JobsRepo + Sync + Send + 'static>,
     job: Option<Arc<dyn Job + Sync + Send + 'static>>,
     job_info: Option<JobInfo>,
+    pub lock_repo: Box<dyn LockRepo + Sync + Send + 'static>,
 }
 
-// #[derive(Clone)]
-// pub struct JobConfig {
-//     pub job: Option<Rc<dyn Job>>,
-// }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct JobInfo {
@@ -59,26 +56,15 @@ impl fmt::Display for Schedule {
 }
 
 pub struct JobLock {
-    lock: Mutex<()>,
+    lock: Arc<Mutex<()>>,
 }
 
 impl JobLock {
         fn new() -> Self {
             JobLock {
-                lock: Mutex::new(()),
+                lock: Arc::new(Mutex::new(())),
             }
         }
-        async fn lock_refresher() -> Result<(), Error> {
-        loop {
-            println!("refreshing lock");
-            sleep(Duration::from_secs(5)).await;
-            // sleep(Duration::from_millis(100));
-            println!("done");
-        }
-        Ok(())
-    }
-        //
-    // }
 }
 
 #[async_trait]
@@ -88,14 +74,18 @@ pub trait JobsRepo {
     async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error>;
 }
 
+#[async_trait]
+pub trait LockRepo {
+    async fn lock_refresher(&mut self) -> Result<(), Error>;
+}
 
-
-impl JobManager {
-    pub fn new(job_repo: impl JobsRepo + Sync + Send + 'static) -> Self {
+    impl JobManager {
+    pub fn new(job_repo: impl JobsRepo + Sync + Send + 'static, lock_repo: impl LockRepo + Sync + Send + 'static) -> Self {
         Self {
             job_repo: Box::new(job_repo),
             job_info: None,
             job: None,
+            lock_repo: Box::new((lock_repo)),
         }
     }
     pub async fn register(
@@ -148,16 +138,12 @@ impl JobManager {
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
 
-        let job_lock = JobLock::new();
+        // let job_lock = JobLock::new();
+
 
         let lock_handle = tokio::spawn(async move {
-            match job_lock.lock.lock().await {
-                _ => {
-                    println!("lock acquired " );
-                    JobLock::lock_refresher().await.expect("TODO: panic message");
+                    &self.lock_repo.lock_refresher().await.expect("TODO: panic message").clone();
                     let _ = tx1.send("done");
-                }
-            }
         });
 
         let job_handle = tokio::spawn(async move {

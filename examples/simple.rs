@@ -1,9 +1,10 @@
 use async_trait::async_trait;
-use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule};
+use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule, JobLock, LockRepo};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -17,6 +18,10 @@ async fn main() {
 
     let repo = DbRepo { db };
 
+    let job_lock = std::sync::Arc::new(jobs::JobLock::new());
+
+    let lr = std::sync::Arc::new(job_lock);
+
     let schedule = Schedule {
         expr: "* * * 3 * * *".to_string(),
     };
@@ -24,7 +29,7 @@ async fn main() {
         name: "".to_string(),
     };
 
-    let mut manager = JobManager::new(repo);
+    let mut manager = JobManager::new(repo, lr);
     manager
         .register("dummy".to_string(), schedule, foo_job)
         .await;
@@ -33,6 +38,16 @@ async fn main() {
 
 pub struct DbRepo {
     db: PickleDb,
+}
+
+pub struct LkRepo {
+    lrepo: std::sync
+}
+
+impl jobs::LockRepo for LkRepo {
+    async fn lock_refresher() -> Result<(), Error> {
+        todo!()
+    }
 }
 
 #[async_trait]
