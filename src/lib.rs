@@ -3,6 +3,7 @@
 // func(context.Context, state []byte) ([]byte, error)
 
 use async_trait::async_trait;
+use futures::future::err;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Error;
@@ -118,7 +119,7 @@ impl JobManager {
         println!("Run");
         let job = self.job.as_ref().unwrap().clone();
         let ji = self.job_info.as_ref().unwrap().clone();
-        let xx = job.clone();
+        let name = ji.clone().name;
 
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -129,23 +130,23 @@ impl JobManager {
         });
 
         let job_handle = tokio::spawn(async move {
-            let new_state = job.clone().call(ji.clone().state).await.unwrap();
-            let _ = tx2.send("done");
+            let state = job.clone().call(ji.clone().state).await.unwrap();
+            let _ = tx2.send(state);
         });
-        // self.job_repo
-        //     .as_mut()
-        //     .save_state(ji.clone().name, new_state)
-        //     .await
-        //     .unwrap();
 
         tokio::select! {
             val = rx1 => {
+                println!("stop signal received from refresh job. stopping job now!!");
                 job_handle.abort();
-                println!("rx1 completed first with {:?}", val);
+                println!("job stopped!!");
             }
-            val = rx2 => {
+            new_state = rx2 => {
+                let s = new_state.unwrap();
+                println!("stop signal received from job. stopping refresh job now!!");
+                self.job_repo.save_state(name, s.clone()).await.unwrap();
                 lock_handle.abort();
-                println!("rx2 completed first with {:?}", val);
+                println!("refresh job stopped!!");
+                // println!("rx2 completed first with {:?}", val);
             }
         }
         println!("all done!!!");
@@ -157,7 +158,7 @@ impl JobManager {
 async fn lock_refresher() -> Result<(), Error> {
     loop {
         println!("refreshing lock");
-        sleep(Duration::from_secs(5)).await;
+        sleep(Duration::from_secs(2)).await;
         // sleep(Duration::from_millis(100));
         println!("done");
     }
