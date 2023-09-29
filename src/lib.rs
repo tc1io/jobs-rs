@@ -81,13 +81,6 @@ impl JobManager {
         job: impl Job + Sync + Send + 'static,
     ) {
         let name1 = name.clone();
-        // let job_info = JobInfo { name, schedule, state: vec![] };
-        //
-        // match self.job_repo.get_job_info(name1.as_str()).await.expect("TODO: panic message") {
-        //     // Some(result) => println!("Result:{} ", result),
-        //     Some(result) => println!("Result:{} ", result),
-        //     None => println!("job not found!"),
-        // }
 
         let state = Vec::<u8>::new();
         let job_info = JobInfo {
@@ -102,7 +95,6 @@ impl JobManager {
             .await
             .expect("TODO: panic message")
         {
-            // Some(result) => println!("Result:{} ", result),
             Some(result) => println!("Result:{} ", result),
             None => println!("job not found!"),
         }
@@ -120,6 +112,8 @@ impl JobManager {
         let job = self.job.as_ref().unwrap().clone();
         let ji = self.job_info.as_ref().unwrap().clone();
         let name = ji.clone().name;
+
+        // TODO: add get_job_info().......
 
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -146,7 +140,6 @@ impl JobManager {
                 self.job_repo.save_state(name, s.clone()).await.unwrap();
                 lock_handle.abort();
                 println!("refresh job stopped!!");
-                // println!("rx2 completed first with {:?}", val);
             }
         }
         println!("all done!!!");
