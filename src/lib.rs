@@ -149,11 +149,12 @@ impl JobManager {
 }
 
 async fn lock_refresher() -> Result<(), Error> {
-    loop {
-        println!("refreshing lock");
-        sleep(Duration::from_secs(2)).await;
-        // sleep(Duration::from_millis(100));
-        println!("done");
-    }
+    // loop {
+    println!("refreshing lock");
+    sleep(Duration::from_secs(5)).await;
+    // Ok(())
+    // sleep(Duration::from_millis(100));
+    // println!("done");
+    // }
     Ok(())
 }

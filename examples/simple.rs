@@ -2,10 +2,7 @@ use async_trait::async_trait;
 use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::fmt::Error;
-use std::future::Future;
-use std::pin::Pin;
-use std::thread;
-use std::time::Duration;
+use tokio::time::{sleep, Duration};
 
 #[tokio::main]
 async fn main() {
@@ -75,7 +72,7 @@ impl Job for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
     async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
         println!("starting job");
-        thread::sleep(Duration::from_secs(10));
+        sleep(Duration::from_secs(10)).await;
         println!("finising job");
         Ok(state)
     }
