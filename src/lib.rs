@@ -55,18 +55,6 @@ impl fmt::Display for Schedule {
     }
 }
 
-pub struct JobLock {
-    lock: Arc<Mutex<()>>,
-}
-
-impl JobLock {
-        fn new() -> Self {
-            JobLock {
-                lock: Arc::new(Mutex::new(())),
-            }
-        }
-}
-
 #[async_trait]
 pub trait JobsRepo {
     async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, Error>;
@@ -76,7 +64,7 @@ pub trait JobsRepo {
 
 #[async_trait]
 pub trait LockRepo {
-    async fn lock_refresher(&mut self) -> Result<(), Error>;
+    async fn lock_refresher1(&self) -> Result<(), Error>;
 }
 
     impl JobManager {
@@ -138,11 +126,10 @@ pub trait LockRepo {
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
 
-        // let job_lock = JobLock::new();
 
-
-        let lock_handle = tokio::spawn(async move {
-                    &self.lock_repo.lock_refresher().await.expect("TODO: panic message").clone();
+        let lock_handle = tokio::spawn(async  {
+                // self.lock_repo.lock_refresher1().await.expect("TODO: panic message");
+                lock_refresher().await.expect("TODO: panic message").clone();
                     let _ = tx1.send("done");
         });
 
@@ -174,12 +161,12 @@ pub trait LockRepo {
     }
 }
 
-// async fn lock_refresher() -> Result<(), Error> {
-//     loop {
-//         println!("refreshing lock");
-//         sleep(Duration::from_secs(5)).await;
-//         // sleep(Duration::from_millis(100));
-//         println!("done");
-//     }
-//     Ok(())
-// }
+async fn lock_refresher() -> Result<(), Error> {
+    loop {
+        println!("refreshing lock");
+        sleep(Duration::from_secs(5)).await;
+        // sleep(Duration::from_millis(100));
+        println!("done");
+    }
+    Ok(())
+}

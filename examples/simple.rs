@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule, JobLock, LockRepo};
+use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule, LockRepo};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::fmt::Error;
 use std::future::Future;
@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() {
@@ -15,12 +16,14 @@ async fn main() {
         PickleDbDumpPolicy::AutoDump,
         SerializationMethod::Json,
     );
+    let mut lrepo = PickleDb::new(
+        "lock.db",
+        PickleDbDumpPolicy::AutoDump,
+        SerializationMethod::Json,
+    );
 
-    let repo = DbRepo { db };
-
-    let job_lock = Arc::new(jobs::JobLock::new());
-
-    let lrepo = LockRepo{job_lock};
+    let repo = DbRepo {db};
+    let lc_repo = LkRepo {lrepo};
 
     let schedule = Schedule {
         expr: "* * * 3 * * *".to_string(),
@@ -29,7 +32,7 @@ async fn main() {
         name: "".to_string(),
     };
 
-    let mut manager = JobManager::new(repo, lrepo);
+    let mut manager = JobManager::new(repo, lc_repo);
     manager
         .register("dummy".to_string(), schedule, foo_job)
         .await;
@@ -40,13 +43,18 @@ pub struct DbRepo {
     db: PickleDb,
 }
 
-pub struct LockRepo {
-    lrepo: std::sync
+pub struct LkRepo {
+    lrepo: PickleDb,
 }
-
+#[async_trait]
 impl jobs::LockRepo for LkRepo {
-    async fn lock_refresher() -> Result<(), Error> {
-        todo!()
+    async fn lock_refresher1(&self) -> Result<(), Error> {
+        loop {
+            println!("refreshing lock");
+            sleep(Duration::from_secs(5)).await;
+            println!("done");
+        }
+        Ok(())
     }
 }
 
