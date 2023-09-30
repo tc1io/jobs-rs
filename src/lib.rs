@@ -91,6 +91,12 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
             .expect("TODO: panic message");
     }
 
+    pub async fn start(&mut self) -> Result<(), Error> {
+        loop {
+            self.run().await?;
+        }
+    }
+
     pub async fn run(&mut self) -> Result<(), Error> {
         println!("Run");
         // let job = self.job.as_ref().unwrap().clone();

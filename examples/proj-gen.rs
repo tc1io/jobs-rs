@@ -9,7 +9,7 @@ async fn main() {
         SerializationMethod::Json,
     );
 
-    for i in 1..1000 {
+    for i in 1..50 {
         println!("{:?}", i);
         let mut lifecycle_state = "CREATED".to_string();
         if i % 2 != 0 {
