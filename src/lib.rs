@@ -44,7 +44,8 @@ pub struct JobInfo {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LockInfo {
     pub status: String,
-    job_id: String,
+    pub job_id: String,
+    pub ttl: Duration
 }
 
 impl fmt::Display for JobInfo {
@@ -58,6 +59,13 @@ impl fmt::Display for Schedule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Customize how JobInfo is formatted as a string here
         write!(f, "expr: {}", self.expr)
+    }
+}
+
+impl fmt::Display for LockInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Customize how JobInfo is formatted as a string here
+        write!(f, "status: {}, job_id: {}", self.status, self.job_id)
     }
 }
 
@@ -126,11 +134,22 @@ pub trait LockRepo {
         let l_info = LockInfo {
             status: "locked".to_string(),
             job_id: "dummy".to_string(),
+            ttl: Default::default(),
         };
         self.lock_repo
             .add_lock(l_info)
             .await
             .expect("TODO: panic message");
+        match self
+            .lock_repo
+            .get_lock(name1.as_str())
+            .await
+            .expect("TODO: panic message")
+        {
+            // Some(result) => println!("Result:{} ", result),
+            Some(result) => println!("Result: {}", result),
+            None => println!("job not found!"),
+        }
     }
 
     pub async fn run(&mut self) -> Result<(), Error> {

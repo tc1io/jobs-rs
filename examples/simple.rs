@@ -5,9 +5,10 @@ use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::thread;
+use std::{fmt, thread};
 use std::time::Duration;
 use tokio::time::sleep;
+use tokio::sync::{Mutex, Semaphore};
 
 #[tokio::main]
 async fn main() {
@@ -58,14 +59,20 @@ impl jobs::LockRepo for LkRepo {
     }
     async fn add_lock(&mut self, lock: jobs::LockInfo) -> Result<bool, Error> {
         println!("adding lock");
-        let name = &lock.status;
-        self.lrepo.set(name.as_str(), &lock).unwrap();
+        let job_lock = Arc::new(Mutex::new(()));
+        let job_semaphore = Arc::new(Semaphore::new(2));
+        let _lock = job_lock.lock().await;
+        println!("Job {} is processing", lock.job_id);
+        let s = &lock.status;
+        self.lrepo.set(s.as_str(), &lock).unwrap();
+        println!("Release the lock and permit");
+        drop(job_semaphore);
         Ok(true)
         // todo!()
     }
 
-    async fn get_lock(&mut self, name: &str) -> Result<Option<jobs::LockInfo>, Error> {
-        if let Some(value) = self.lrepo.get(name) {
+    async fn get_lock(&mut self, job_id: &str) -> Result<Option<LockInfo>, Error> {
+        if let Some(value) = self.lrepo.get(job_id) {
             Ok(value)
         } else {
             Ok(None)
@@ -111,7 +118,7 @@ struct FooJob {
 #[async_trait]
 impl Job for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
-    async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
+    async fn call(&self, state: Vec<u8 >) -> Result<Vec<u8>, Error> {
         println!("starting job");
         thread::sleep(Duration::from_secs(10));
         println!("finising job");
