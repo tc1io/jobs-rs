@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use cron_parser::parse;
 use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
@@ -24,11 +23,11 @@ async fn main() {
     let repo = DbRepo { db };
 
     let schedule = Schedule {
-        expr: "*/5 * * * *".to_string(),
+        expr: "*/2 * * * * *".to_string(),
     };
-    if let Ok(next) = parse(schedule.expr.as_str(), &Utc::now()) {
-        println!("when: {}", next);
-    }
+    // if let Ok(next) = parse(schedule.expr.as_str(), &Utc::now()) {
+    //     println!("when: {}", next);
+    // }
     let foo_job = FooJob {
         name: "".to_string(),
         db: project_db,
@@ -78,6 +77,8 @@ impl JobsRepo for DbRepo {
             .unwrap()
             .unwrap();
         job.state = state;
+        job.last_run = Utc::now().timestamp_millis();
+        dbg!("{:?}", job.last_run);
         self.db.set(name.as_str(), &job).unwrap();
         println!("state saved");
         Ok(true)

@@ -3,11 +3,15 @@
 // func(context.Context, state []byte) ([]byte, error)
 
 use async_trait::async_trait;
+use chrono::{DateTime, TimeZone, Utc};
+use cron::Schedule as CronSchedule;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
+use std::str::FromStr;
+use std::time::{Duration as dur, SystemTime};
 use tokio::time::{sleep, Duration};
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -31,6 +35,8 @@ pub struct JobInfo {
     pub name: String,
     pub schedule: Schedule,
     pub state: Vec<u8>,
+    pub enabled: bool,
+    pub last_run: i64,
 }
 
 impl fmt::Display for JobInfo {
@@ -67,10 +73,23 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
         let name1 = name.clone();
 
         let state = Vec::<u8>::new();
+        // pub fn now() -> Timestamp {
+        let duration_since_epoch = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Duration since UNI epoch must be > 0");
+        // Timestamp {
+        //     epoch: 1,
+        //     unixmillis: duration_since_epoch.as_millis() as u64,
+        // }
+        // }
+        // println!("{:?}", duration_since_epoch.as_millis().clone());
+        // println!("{:?}", Utc::now());
         let job_info = JobInfo {
             name,
             schedule,
             state,
+            enabled: true,
+            last_run: DateTime::<Utc>::default().timestamp_millis(),
         };
 
         match self
@@ -94,66 +113,142 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
     pub async fn start(&mut self) -> Result<(), Error> {
         loop {
             self.run().await?;
+            sleep(Duration::from_secs(60)).await;
         }
     }
 
     pub async fn run(&mut self) -> Result<(), Error> {
         println!("Run");
         // let job = self.job.as_ref().unwrap().clone();
-        let ji = self.job_info.as_ref().unwrap().clone();
-        let name = ji.clone().name;
+        let name = &self.job_info.as_ref().unwrap().name;
+        let ji = self
+            .job_repo
+            .get_job_info(name.as_str())
+            .await
+            .unwrap()
+            .unwrap()
+            .clone();
+        // let name = ji.clone().name;
 
-        // TODO: add get_job_info().......
+        if ji.clone().should_run_now().await.unwrap() {
+            println!("yes");
 
-        // let (tx1, rx1) = oneshot::channel();
-        // let (tx2, rx2) = oneshot::channel();
-
-        // let lock_handle = tokio::spawn(async move {
-        let xx = lock_refresher();
-        let yy = self.job.as_mut().unwrap().call(ji.clone().state);
-
-        // async move{
-        //     xx.await;
-        //     yy.await;
-        // }
-        // let _ = tx1.send("done");
-        // });
-
-        // let job_handle = tokio::spawn(async move {
-        // let state = job.clone().call(ji.clone().state).await.unwrap();
-        // let _ = tx2.send(state);
-        // });
-
-        let f = tokio::select! {
-            foo = xx => {
-                match foo {
-                    Ok(_) => Err(1),
-                    Err(_) => Err(2),
-                }
-            }
-            bar = yy => {
-                match bar {
-                    Ok(state) => Ok(state),
-                    Err(_) => Err(4),
-                }
-            }
-            // val = rx1 => {
-            //     println!("stop signal received from refresh job. stopping job now!!");
-            //     job_handle.abort();
-            //     println!("job stopped!!");
+            // let schedule = CronSchedule::from_str(ji.schedule.expr.as_str()).unwrap();
+            // let zz = schedule
+            //     .upcoming(Utc)
+            //     .next()
+            //     .map(|t| t.timestamp_millis() > Utc::now().timestamp_millis())
+            //     .unwrap_or(false);
+            // dbg!("{:?}", zz);
+            // let duration_since_epoch = SystemTime::now()
+            //     .duration_since(SystemTime::UNIX_EPOCH)
+            //     .expect("Duration since UNI epoch must be > 0");
+            //
+            // println!("{:?}", duration_since_epoch.as_millis().clone());
+            // if xx > Utc::now().timestamp_millis() {
+            //     println!("{:?}", Utc::now().timestamp_millis());
             // }
-            // new_state = rx2 => {
-            //     let s = new_state.unwrap();
-            //     println!("stop signal received from job. stopping refresh job now!!");
-            //     self.job_repo.save_state(name, s.clone()).await.unwrap();
-            //     lock_handle.abort();
-            //     println!("refresh job stopped!!");
+            // for datetime in xx.take(1) {
+            //     println!("-> {}", datetime);
             // }
-        };
-        println!("{:?}", f);
-        println!("all done!!!");
+
+            // if let Ok(next) = parse(ji.schedule.expr.as_str(), &Utc::now()) {
+            //     println!("{:?}", next.timestamp_millis());
+            //     if next > Utc::now() {
+            //         println!("when: {:?}", next);
+            //     }
+            // }
+
+            // TODO: add get_job_info().......
+            // let ji2 = self
+            //     .job_repo
+            //     .get_job_info(name.as_ref())
+            //     .await
+            //     .unwrap()
+            //     .unwrap();
+
+            // let (tx1, rx1) = oneshot::channel();
+            // let (tx2, rx2) = oneshot::channel();
+
+            // let lock_handle = tokio::spawn(async move {
+            let xx = lock_refresher();
+            let yy = self.job.as_mut().unwrap().call(ji.clone().state);
+
+            // async move{
+            //     xx.await;
+            //     yy.await;
+            // }
+            // let _ = tx1.send("done");
+            // });
+
+            // let job_handle = tokio::spawn(async move {
+            // let state = job.clone().call(ji.clone().state).await.unwrap();
+            // let _ = tx2.send(state);
+            // });
+
+            let f = tokio::select! {
+                foo = xx => {
+                    match foo {
+                        Ok(_) => Err(1),
+                        Err(_) => Err(2),
+                    }
+                }
+                bar = yy => {
+                    match bar {
+                        Ok(state) => {
+                            println!("before saving state");
+                            self.job_repo.save_state(ji.name, state).await;
+                            Ok(())
+                            }
+                        Err(_) => Err(4),
+                    }
+                }
+                // val = rx1 => {
+                //     println!("stop signal received from refresh job. stopping job now!!");
+                //     job_handle.abort();
+                //     println!("job stopped!!");
+                // }
+                // new_state = rx2 => {
+                //     let s = new_state.unwrap();
+                //     println!("stop signal received from job. stopping refresh job now!!");
+                //     self.job_repo.save_state(name, s.clone()).await.unwrap();
+                //     lock_handle.abort();
+                //     println!("refresh job stopped!!");
+                // }
+            };
+            println!("{:?}", f);
+            println!("all done!!!");
+        }
 
         Ok(())
+    }
+}
+
+impl JobInfo {
+    async fn should_run_now(self) -> Result<bool, Error> {
+        if !self.enabled {
+            return Ok(false);
+        }
+        dbg!("{:?}", self.last_run);
+        if self.last_run.eq(&0) {
+            return Ok(true);
+        }
+        let schedule = CronSchedule::from_str(self.schedule.expr.as_str()).unwrap();
+        let next_scheduled_run = schedule
+            .upcoming(Utc)
+            .next()
+            .map(|t| t.timestamp_millis())
+            .unwrap_or(0);
+        dbg!(
+            "{:?}-----{:?}---- {:?}",
+            self.last_run,
+            next_scheduled_run,
+            Utc::now().timestamp_millis()
+        );
+        if next_scheduled_run < Utc::now().timestamp_millis() {
+            return Ok(true);
+        }
+        Ok(false)
     }
 }
 
