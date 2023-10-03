@@ -9,7 +9,6 @@ use std::{fmt, thread};
 use std::time::Duration;
 use tokio::time::sleep;
 use tokio::sync::{Mutex, Semaphore};
-
 #[tokio::main]
 async fn main() {
     let mut db = PickleDb::new(
@@ -50,12 +49,12 @@ pub struct LkRepo {
 #[async_trait]
 impl jobs::LockRepo for LkRepo {
     async fn lock_refresher1(&self) -> Result<(), Error> {
-        loop {
+        // loop {
             println!("refreshing lock");
             sleep(Duration::from_secs(5)).await;
             println!("done");
-        }
-        Ok(())
+        // }
+    Ok(())
     }
     async fn add_lock(&mut self, lock: jobs::LockInfo) -> Result<bool, Error> {
         println!("adding lock");
@@ -124,4 +123,31 @@ impl Job for FooJob {
         println!("finising job");
         Ok(state)
     }
+}
+
+#[tokio::test]
+#[cfg(test)]
+async fn test_lock_refresher1() {
+    let lrepo = LkRepo {
+        lrepo: PickleDb::new("test.db", PickleDbDumpPolicy::AutoDump, SerializationMethod::Json),
+    };
+    let result = lrepo.lock_refresher1().await;
+    assert!(result.is_ok());
+}
+#[tokio::test]
+#[cfg(test)]
+async fn test_add_lock() {
+    // Create a new instance of LkRepo with a PickleDb
+    let mut lrepo = LkRepo {
+        lrepo: PickleDb::new("test.db", PickleDbDumpPolicy::AutoDump, SerializationMethod::Json),
+    };
+
+    // Create a LockInfo instance to pass to the add_lock function
+    let lock = LockInfo {
+        job_id: "job1".to_string(),
+        status: "processing".to_string(),
+        ttl: Default::default(),
+    };
+    let result = lrepo.add_lock(lock).await;
+    assert!(result.is_ok());
 }
