@@ -16,6 +16,13 @@ use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 mod test;
 
+
+#[derive(Debug)]
+pub enum JobError {
+    DatabaseError(String),
+    LockError(String),
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Schedule {
     pub expr: String,
@@ -23,7 +30,7 @@ pub struct Schedule {
 
 #[async_trait]
 pub trait Job {
-    async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
+    async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, JobError>;
 }
 
 pub struct JobManager {
@@ -71,16 +78,16 @@ impl fmt::Display for LockInfo {
 
 #[async_trait]
 pub trait JobsRepo {
-    async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, Error>;
-    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error>;
-    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error>;
+    async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, JobError>;
+    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, JobError>;
+    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, JobError>;
 }
 
 #[async_trait]
 pub trait LockRepo {
-    async fn lock_refresher1(&self) -> Result<(), Error>;
-    async fn add_lock(&mut self, li: LockInfo) -> Result<bool, Error>;
-    async fn get_lock(&mut self, name: &str) -> Result<Option<LockInfo>, Error>;
+    async fn lock_refresher1(&self) -> Result<(), JobError>;
+    async fn add_lock(&mut self, li: LockInfo) -> Result<bool, JobError>;
+    async fn get_lock(&mut self, name: &str) -> Result<Option<LockInfo>, JobError>;
 }
 
     impl JobManager {
@@ -127,10 +134,18 @@ pub trait LockRepo {
 
         self.job = Some(Arc::new(job));
         self.job_info = Some(job_info.clone());
-        self.job_repo
+        let r = self.job_repo
             .create_job(job_info)
-            .await
-            .expect("TODO: panic message");
+            .await;
+        match r {
+            Ok(_) => {
+                println!("job created successful");
+                // Ok(())
+            }
+            Err(err) => Err(JobError::DatabaseError("Failed to create job".to_string())).expect("TODO: panic message"),
+                // Err(err)
+        };
+
         let l_info = LockInfo {
             status: "locked".to_string(),
             job_id: "dummy".to_string(),
@@ -148,11 +163,11 @@ pub trait LockRepo {
         {
             // Some(result) => println!("Result:{} ", result),
             Some(result) => println!("Result: {}", result),
-            None => println!("job not found!"),
+            None => println!("lock not found!"),
         }
     }
 
-    pub async fn run(&mut self) -> Result<(), Error> {
+    pub async fn run(&mut self) -> Result<(), JobError> {
         println!("Run");
         let job = self.job.as_ref().unwrap().clone();
         let ji = self.job_info.as_ref().unwrap().clone();
@@ -160,6 +175,8 @@ pub trait LockRepo {
 
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
+
+
 
 
         let lock_handle = tokio::spawn(async  {
@@ -172,7 +189,6 @@ pub trait LockRepo {
             let new_state = job.clone().call(ji.clone().state).await.unwrap();
             let _ = tx2.send("done");
         });
-
 
 
         // self.job_repo

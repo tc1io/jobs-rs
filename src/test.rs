@@ -1,4 +1,4 @@
-use crate::Schedule;
+use crate::{JobError, Schedule};
 use crate::JobManager;
 use core::fmt::Error;
 use crate::LockInfo;
@@ -11,15 +11,15 @@ use crate::JobsRepo;
 struct MockJobsRepo;
 #[async_trait::async_trait]
 impl JobsRepo for MockJobsRepo {
-    async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, Error> {
+    async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, JobError> {
         Ok(true)
     }
 
-    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error> {
+    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, JobError> {
         Ok(None)
     }
 
-    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error> {
+    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, JobError> {
         Ok(true)
     }
 }
@@ -28,15 +28,15 @@ impl JobsRepo for MockJobsRepo {
 struct MockLockRepo;
 #[async_trait::async_trait]
 impl LockRepo for MockLockRepo {
-    async fn lock_refresher1(&self) -> Result<(), Error> {
+    async fn lock_refresher1(&self) -> Result<(), JobError> {
         Ok(())
     }
 
-    async fn add_lock(&mut self, li: LockInfo) -> Result<bool, Error> {
+    async fn add_lock(&mut self, li: LockInfo) -> Result<bool, JobError> {
         Ok(true)
     }
 
-    async fn get_lock(&mut self, name: &str) -> Result<Option<LockInfo>, Error> {
+    async fn get_lock(&mut self, name: &str) -> Result<Option<LockInfo>, JobError> {
         Ok(None)
     }
 }
@@ -49,7 +49,7 @@ async fn test_job_call() {
     struct MockJob;
     #[async_trait::async_trait]
     impl Job for MockJob {
-        async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
+        async fn call(&self, state: Vec<u8>) -> Result<Vec<u8>, JobError> {
             // implement a mock behavior here for testing
             Ok(state)
         }

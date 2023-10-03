@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule, LockRepo, LockInfo};
+use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule, LockRepo, LockInfo, JobError};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::fmt::Error;
 use std::future::Future;
@@ -10,7 +10,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tokio::sync::{Mutex, Semaphore};
 #[tokio::main]
-async fn main() {
+async fn main()-> Result<(), JobError> {
     let mut db = PickleDb::new(
         "example.db",
         PickleDbDumpPolicy::AutoDump,
@@ -22,8 +22,8 @@ async fn main() {
         SerializationMethod::Json,
     );
 
-    let repo = DbRepo {db};
-    let lc_repo = LkRepo {lrepo};
+    let repo = DbRepo { db };
+    let lc_repo = LkRepo { lrepo };
 
     let schedule = Schedule {
         expr: "* * * 3 * * *".to_string(),
@@ -36,7 +36,23 @@ async fn main() {
     manager
         .register("dummy".to_string(), schedule, foo_job)
         .await;
-    manager.run().await.unwrap();
+
+    let result = manager.run().await;
+    match result {
+        Ok(_) => {
+            println!("JobManager run successful");
+            Ok(())
+        }
+        // Err(err) => {
+        //     Err(MyError::DatabaseError("JobManager run failed".to_string())).expect("TODO: panic message")
+        //     // eprintln!("JobManager run failed: {:?}", err);
+        //     // Err(err)
+        // }
+        Err(err) => {
+            eprintln!("JobManager run failed: {:?}", err);
+            Err(err)
+        }
+    }
 }
 
 pub struct DbRepo {
@@ -48,7 +64,7 @@ pub struct LkRepo {
 }
 #[async_trait]
 impl jobs::LockRepo for LkRepo {
-    async fn lock_refresher1(&self) -> Result<(), Error> {
+    async fn lock_refresher1(&self) -> Result<(), JobError> {
         // loop {
             println!("refreshing lock");
             sleep(Duration::from_secs(5)).await;
@@ -56,21 +72,21 @@ impl jobs::LockRepo for LkRepo {
         // }
     Ok(())
     }
-    async fn add_lock(&mut self, lock: jobs::LockInfo) -> Result<bool, Error> {
+    async fn add_lock(&mut self, lock: jobs::LockInfo) -> Result<bool, JobError> {
         println!("adding lock");
         let job_lock = Arc::new(Mutex::new(()));
         let job_semaphore = Arc::new(Semaphore::new(2));
         let _lock = job_lock.lock().await;
         println!("Job {} is processing", lock.job_id);
         let s = &lock.status;
-        self.lrepo.set(s.as_str(), &lock).unwrap();
+        self.lrepo.set(s.as_str(), &lock).expect("TODO: panic message");
         println!("Release the lock and permit");
         drop(job_semaphore);
         Ok(true)
         // todo!()
     }
 
-    async fn get_lock(&mut self, job_id: &str) -> Result<Option<LockInfo>, Error> {
+    async fn get_lock(&mut self, job_id: &str) -> Result<Option<LockInfo>, JobError> {
         if let Some(value) = self.lrepo.get(job_id) {
             Ok(value)
         } else {
@@ -81,16 +97,26 @@ impl jobs::LockRepo for LkRepo {
 
 #[async_trait]
 impl JobsRepo for DbRepo {
-    async fn create_job(&mut self, ji: JobInfo) -> Result<bool, Error> {
+    async fn create_job(&mut self, ji: JobInfo) -> Result<bool, JobError> {
         // TODO: do it without jobs ext - jobs::Schedule
         println!("create_job");
         let name = &ji.name;
-        self.db.set(name.as_str(), &ji).unwrap();
-        Ok(true)
+        let b= self.db.set("name", &ji);
+        match b {
+            Ok(..) => {
+                Ok(true)
+            }
+            Err(err) => {
+                Err(JobError::DatabaseError("Job creation failed".to_string())).expect("TODO: panic message")
+                // eprintln!("JobManager run failed: {:?}", err);
+                // Err(err)
+            }
+        }
+
         // todo!()
     }
 
-    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error> {
+    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, JobError> {
         if let Some(value) = self.db.get(name) {
             Ok(value)
         } else {
@@ -98,14 +124,14 @@ impl JobsRepo for DbRepo {
         }
     }
 
-    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error> {
+    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, JobError> {
         let mut job = self
             .get_job_info(name.as_str().clone())
             .await
             .unwrap()
             .unwrap();
         job.state = state;
-        self.db.set(name.as_str(), &job).unwrap();
+        self.db.set(name.as_str(), &job);
         println!("state saved");
         Ok(true)
     }
@@ -117,7 +143,7 @@ struct FooJob {
 #[async_trait]
 impl Job for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
-    async fn call(&self, state: Vec<u8 >) -> Result<Vec<u8>, Error> {
+    async fn call(&self, state: Vec<u8 >) -> Result<Vec<u8>, JobError> {
         println!("starting job");
         thread::sleep(Duration::from_secs(10));
         println!("finising job");
