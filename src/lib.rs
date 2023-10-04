@@ -439,9 +439,9 @@ impl JobInfo {
             return Ok(false);
         }
         dbg!("{:?}", self.last_run);
-        // if self.last_run.eq(&0) {
-        //     return Ok(true);
-        // }
+        if self.last_run.eq(&0) {
+            return Ok(true);
+        }
         let dt = UNIX_EPOCH + Dur::from_millis(self.last_run as u64);
         // let date_time = DateTime::<Utc>::(self.last_run, 0).unwrap();
         let date_time = DateTime::<Utc>::from(dt);

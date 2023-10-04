@@ -208,9 +208,9 @@ impl Job for FooJob {
             let mut data = self.db.get::<Project>(&a).unwrap();
             if data.lifecycle_state == "DELETED" {
                 data.updated = "DONE".to_string();
-                // self.db
-                //     .set(format!("{:?}", data.id.clone()).as_str(), &data)
-                //     .unwrap();
+                self.db
+                    .set(format!("{:?}", data.id.clone()).as_str(), &data)
+                    .unwrap();
                 println!("{:?}", data);
                 sleep(Duration::from_secs(1)).await;
             }
