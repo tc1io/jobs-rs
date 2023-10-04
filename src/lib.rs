@@ -10,9 +10,12 @@ use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration as Dur, SystemTime, UNIX_EPOCH};
 use std::{fmt, println};
+// use tokio::sync::RwLock;
 use tokio::time::{sleep, Duration};
+mod job;
 mod test;
 
 #[derive(Debug)]
@@ -30,10 +33,36 @@ pub struct Schedule {
 pub trait Job {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
 }
+#[derive(Clone)]
+struct Jobs2 {
+    pub name: String,
+    pub schedule: Schedule,
+    pub state: Vec<u8>,
+    pub enabled: bool,
+    pub last_run: i64,
+    pub runner: Arc<RwLock<Box<dyn Job + Sync + Send + 'static>>>,
+}
+
+#[async_trait]
+impl Job for Jobs2 {
+    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
+        todo!()
+    }
+}
+
+impl Jobs2 {
+    async fn run(&mut self) -> Result<(), Error> {
+        let yy = self.runner;
+        dbg!("new run");
+        Ok(())
+    }
+}
 
 pub struct JobManager<R, T> {
     pub job_repo: R,
     job: Option<T>,
+    // jobs: Job2,
+    jobs2: Vec<Jobs2>,
     job_info: Option<JobInfo>,
     pub lock_repo: Box<dyn LockRepo + Sync + Send + 'static>,
 }
@@ -96,6 +125,14 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
             job_info: None,
             job: None,
             lock_repo: Box::new((lock_repo)),
+            jobs2: Vec::new(),
+            // jobs: Job2 {
+            //     name: "",
+            //     schedule: Schedule {
+            //         expr: "".to_string(),
+            //     },
+            //     runner: (),
+            // },
         }
     }
     // pub async fn register(
@@ -105,7 +142,13 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
     //     job: impl Job + Sync + Send + 'static,
     // ) {
 
-    pub async fn register(&mut self, name: String, schedule: Schedule, job: T) {
+    pub async fn register(
+        &mut self,
+        name: String,
+        schedule: Schedule,
+        job: T,
+        new_job: impl Job + Sync + Send + 'static,
+    ) {
         let name1 = name.clone();
 
         let state = Vec::<u8>::new();
@@ -122,11 +165,19 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
         // println!("{:?}", Utc::now());
         let job_info = JobInfo {
             name,
-            schedule,
-            state,
+            schedule: schedule.clone(),
+            state: state.clone(),
             enabled: true,
             last_run: DateTime::<Utc>::default().timestamp_millis(),
         };
+        self.jobs2.push(Jobs2 {
+            name: name1.clone(),
+            schedule: schedule.clone(),
+            state: state.clone(),
+            enabled: false,
+            last_run: 0,
+            runner: Arc::new(RwLock::new(Box::new(new_job))),
+        });
 
         match self
             .job_repo
@@ -214,8 +265,13 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
     // =======
     pub async fn start(&mut self) -> Result<(), Error> {
         loop {
-            self.run().await?;
+            for mut job in self.jobs2.clone() {
+                job.run().await.expect("TODO: panic message");
+            }
+
+            // .map(|job| async { job.run().await });
             sleep(Duration::from_secs(10)).await;
+            // return Ok(());
         }
     }
 

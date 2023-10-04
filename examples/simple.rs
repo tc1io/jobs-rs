@@ -31,6 +31,12 @@ async fn main() {
         SerializationMethod::Json,
     )
     .unwrap();
+    let mut project_db2 = PickleDb::load(
+        "project.db",
+        PickleDbDumpPolicy::AutoDump,
+        SerializationMethod::Json,
+    )
+    .unwrap();
 
     let repo = DbRepo { db };
     let lc_repo = LkRepo { lrepo };
@@ -44,6 +50,16 @@ async fn main() {
     let foo_job = FooJob {
         name: "".to_string(),
         db: project_db,
+        project: Project {
+            name: "".to_string(),
+            id: 0,
+            lifecycle_state: "".to_string(),
+            updated: "".to_string(),
+        },
+    };
+    let foo_job2 = FooJob {
+        name: "".to_string(),
+        db: project_db2,
         project: Project {
             name: "".to_string(),
             id: 0,
@@ -76,7 +92,7 @@ async fn main() {
     // =======
     let mut manager = JobManager::<DbRepo, FooJob>::new(repo, lc_repo);
     manager
-        .register("dummy".to_string(), schedule, foo_job)
+        .register("dummy".to_string(), schedule, foo_job, foo_job2)
         .await;
     // manager.run().await.unwrap();
     manager.start().await.unwrap();
