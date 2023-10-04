@@ -1,16 +1,20 @@
 use async_trait::async_trait;
-use jobs::{Job, JobInfo, JobManager, JobsRepo, Schedule, LockRepo, LockInfo, JobError};
+use chrono::{TimeZone, Utc};
+use jobs::{Job, JobError, JobInfo, JobManager, JobsRepo, LockInfo, LockRepo, Schedule};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
+use serde::{Deserialize, Serialize};
 use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::{fmt, thread};
-use std::time::Duration;
-use tokio::time::sleep;
+// use std::time::Duration;
+// use tokio::time::sleep;
 use tokio::sync::{Mutex, Semaphore};
+use tokio::time::{sleep, Duration};
+
 #[tokio::main]
-async fn main()-> Result<(), JobError> {
+async fn main() {
     let mut db = PickleDb::new(
         "example.db",
         PickleDbDumpPolicy::AutoDump,
@@ -21,38 +25,61 @@ async fn main()-> Result<(), JobError> {
         PickleDbDumpPolicy::AutoDump,
         SerializationMethod::Json,
     );
+    let mut project_db = PickleDb::load(
+        "project.db",
+        PickleDbDumpPolicy::AutoDump,
+        SerializationMethod::Json,
+    )
+    .unwrap();
 
     let repo = DbRepo { db };
     let lc_repo = LkRepo { lrepo };
 
     let schedule = Schedule {
-        expr: "* * * 3 * * *".to_string(),
+        expr: "*/2 * * * * *".to_string(),
     };
+    // if let Ok(next) = parse(schedule.expr.as_str(), &Utc::now()) {
+    //     println!("when: {}", next);
+    // }
     let foo_job = FooJob {
         name: "".to_string(),
+        db: project_db,
+        project: Project {
+            name: "".to_string(),
+            id: 0,
+            lifecycle_state: "".to_string(),
+            updated: "".to_string(),
+        },
     };
 
-    let mut manager = JobManager::new(repo, lc_repo);
+    // let mut manager = JobManager::new(repo, lc_repo);
+    // manager
+    //     .register("dummy".to_string(), schedule, foo_job)
+    //     .await;
+    //
+    // let result = manager.run().await.unwrap();
+    //     match result {
+    //         Ok(_) => {
+    //             println!("JobManager run successful");
+    //             Ok(())
+    //         }
+    //         // Err(err) => {
+    //         //     Err(MyError::DatabaseError("JobManager run failed".to_string())).expect("TODO: panic message")
+    //         //     // eprintln!("JobManager run failed: {:?}", err);
+    //         //     // Err(err)
+    //         // }
+    //         Err(err) => {
+    //             eprintln!("JobManager run failed: {:?}", err);
+    //             Err(err)
+    //         }
+    //     }
+    // =======
+    let mut manager = JobManager::<DbRepo, FooJob>::new(repo, lc_repo);
     manager
         .register("dummy".to_string(), schedule, foo_job)
         .await;
-
-    let result = manager.run().await;
-    match result {
-        Ok(_) => {
-            println!("JobManager run successful");
-            Ok(())
-        }
-        // Err(err) => {
-        //     Err(MyError::DatabaseError("JobManager run failed".to_string())).expect("TODO: panic message")
-        //     // eprintln!("JobManager run failed: {:?}", err);
-        //     // Err(err)
-        // }
-        Err(err) => {
-            eprintln!("JobManager run failed: {:?}", err);
-            Err(err)
-        }
-    }
+    // manager.run().await.unwrap();
+    manager.start().await.unwrap();
 }
 
 pub struct DbRepo {
@@ -66,11 +93,11 @@ pub struct LkRepo {
 impl jobs::LockRepo for LkRepo {
     async fn lock_refresher1(&self) -> Result<(), JobError> {
         // loop {
-            println!("refreshing lock");
-            sleep(Duration::from_secs(5)).await;
-            println!("done");
+        println!("refreshing lock");
+        sleep(Duration::from_secs(5)).await;
+        println!("done");
         // }
-    Ok(())
+        Ok(())
     }
     async fn add_lock(&mut self, lock: jobs::LockInfo) -> Result<bool, JobError> {
         println!("adding lock");
@@ -79,7 +106,9 @@ impl jobs::LockRepo for LkRepo {
         let _lock = job_lock.lock().await;
         println!("Job {} is processing", lock.job_id);
         let s = &lock.status;
-        self.lrepo.set(s.as_str(), &lock).expect("TODO: panic message");
+        self.lrepo
+            .set(s.as_str(), &lock)
+            .expect("TODO: panic message");
         println!("Release the lock and permit");
         drop(job_semaphore);
         Ok(true)
@@ -101,13 +130,12 @@ impl JobsRepo for DbRepo {
         // TODO: do it without jobs ext - jobs::Schedule
         println!("create_job");
         let name = &ji.name;
-        let b= self.db.set("name", &ji);
+        let b = self.db.set("name", &ji);
         match b {
-            Ok(..) => {
-                Ok(true)
-            }
+            Ok(..) => Ok(true),
             Err(err) => {
-                Err(JobError::DatabaseError("Job creation failed".to_string())).expect("TODO: panic message")
+                Err(JobError::DatabaseError("Job creation failed".to_string()))
+                    .expect("TODO: panic message")
                 // eprintln!("JobManager run failed: {:?}", err);
                 // Err(err)
             }
@@ -131,21 +159,47 @@ impl JobsRepo for DbRepo {
             .unwrap()
             .unwrap();
         job.state = state;
-        self.db.set(name.as_str(), &job);
+        job.last_run = Utc::now().timestamp_millis();
+        dbg!("{:?}", job.last_run);
+        self.db.set(name.as_str(), &job).unwrap();
         println!("state saved");
         Ok(true)
     }
 }
 struct FooJob {
     name: String,
+    db: PickleDb,
+    project: Project,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+struct Project {
+    name: String,
+    id: i32,
+    lifecycle_state: String,
+    updated: String,
 }
 
 #[async_trait]
 impl Job for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
-    async fn call(&self, state: Vec<u8 >) -> Result<Vec<u8>, JobError> {
+    // async fn call(&self, state: Vec<u8 >) -> Result<Vec<u8>, JobError> {
+    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
         println!("starting job");
-        thread::sleep(Duration::from_secs(10));
+        let all_data = self.db.get_all();
+        for a in all_data {
+            // println!("inside iterator");
+            let mut data = self.db.get::<Project>(&a).unwrap();
+            if data.lifecycle_state == "DELETED" {
+                data.updated = "DONE".to_string();
+                // self.db
+                //     .set(format!("{:?}", data.id.clone()).as_str(), &data)
+                //     .unwrap();
+                println!("{:?}", data);
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+        // sleep(Duration::from_secs(10)).await;
         println!("finising job");
         Ok(state)
     }
@@ -155,7 +209,11 @@ impl Job for FooJob {
 #[cfg(test)]
 async fn test_lock_refresher1() {
     let lrepo = LkRepo {
-        lrepo: PickleDb::new("test.db", PickleDbDumpPolicy::AutoDump, SerializationMethod::Json),
+        lrepo: PickleDb::new(
+            "test.db",
+            PickleDbDumpPolicy::AutoDump,
+            SerializationMethod::Json,
+        ),
     };
     let result = lrepo.lock_refresher1().await;
     assert!(result.is_ok());
@@ -165,7 +223,11 @@ async fn test_lock_refresher1() {
 async fn test_add_lock() {
     // Create a new instance of LkRepo with a PickleDb
     let mut lrepo = LkRepo {
-        lrepo: PickleDb::new("test.db", PickleDbDumpPolicy::AutoDump, SerializationMethod::Json),
+        lrepo: PickleDb::new(
+            "test.db",
+            PickleDbDumpPolicy::AutoDump,
+            SerializationMethod::Json,
+        ),
     };
 
     // Create a LockInfo instance to pass to the add_lock function
