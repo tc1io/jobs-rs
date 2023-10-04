@@ -10,7 +10,7 @@ use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
-use std::time::{Duration as dur, SystemTime};
+use std::time::{Duration as Dur, SystemTime, UNIX_EPOCH};
 use std::{fmt, println};
 use tokio::time::{sleep, Duration};
 mod test;
@@ -215,7 +215,7 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
     pub async fn start(&mut self) -> Result<(), Error> {
         loop {
             self.run().await?;
-            sleep(Duration::from_secs(60)).await;
+            sleep(Duration::from_secs(10)).await;
         }
     }
 
@@ -332,12 +332,21 @@ impl JobInfo {
             return Ok(false);
         }
         dbg!("{:?}", self.last_run);
-        if self.last_run.eq(&0) {
-            return Ok(true);
-        }
+        // if self.last_run.eq(&0) {
+        //     return Ok(true);
+        // }
+        let dt = UNIX_EPOCH + Dur::from_millis(self.last_run as u64);
+        // let date_time = DateTime::<Utc>::(self.last_run, 0).unwrap();
+        let date_time = DateTime::<Utc>::from(dt);
+        dbg!("", date_time);
         let schedule = CronSchedule::from_str(self.schedule.expr.as_str()).unwrap();
+        let ff = schedule.after(&date_time).next().unwrap_or(Utc::now());
+        // .next()
+        // .map(|t| t.timestamp_millis())
+        // .unwrap();
+        dbg!("", ff);
         let next_scheduled_run = schedule
-            .upcoming(Utc)
+            .after(&date_time)
             .next()
             .map(|t| t.timestamp_millis())
             .unwrap_or(0);
@@ -347,7 +356,7 @@ impl JobInfo {
             next_scheduled_run,
             Utc::now().timestamp_millis()
         );
-        if next_scheduled_run < Utc::now().timestamp_millis() {
+        if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
             return Ok(true);
         }
         Ok(false)
