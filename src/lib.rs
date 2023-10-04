@@ -10,7 +10,7 @@ use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration as Dur, SystemTime, UNIX_EPOCH};
 use std::{fmt, println};
 // use tokio::sync::RwLock;
@@ -40,20 +40,35 @@ struct Jobs2 {
     pub state: Vec<u8>,
     pub enabled: bool,
     pub last_run: i64,
-    pub runner: Arc<RwLock<Box<dyn Job + Sync + Send + 'static>>>,
+    pub runner: Arc<RwLock<dyn Job + Sync + Send + 'static>>,
 }
 
-#[async_trait]
-impl Job for Jobs2 {
-    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
-        todo!()
-    }
-}
+// #[async_trait]
+// impl Job for Jobs2 {
+//     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
+//         todo!()
+//     }
+// }
 
 impl Jobs2 {
-    async fn run(&mut self) -> Result<(), Error> {
-        let yy = self.runner;
+    async fn run(&mut self, mut job_repo: impl JobsRepo) -> Result<(), Error> {
         dbg!("new run");
+        let name = self.name.clone();
+        let mut w = self.runner.write().unwrap();
+        let xx = w.call(self.state.clone());
+        let f = tokio::select! {
+            bar = xx => {
+                match bar {
+                    Ok(state) => {
+                        println!("before saving state");
+                        job_repo.save_state(name, state).await;
+                        Ok(())
+                        }
+                    Err(_) => Err(4),
+                }
+            }
+        }
+        .unwrap();
         Ok(())
     }
 }
@@ -176,7 +191,7 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
             state: state.clone(),
             enabled: false,
             last_run: 0,
-            runner: Arc::new(RwLock::new(Box::new(new_job))),
+            runner: Arc::new(RwLock::new(new_job)),
         });
 
         match self
@@ -266,13 +281,49 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
     pub async fn start(&mut self) -> Result<(), Error> {
         loop {
             for mut job in self.jobs2.clone() {
-                job.run().await.expect("TODO: panic message");
+                self.run2(job).await.expect("TODO: panic message");
             }
 
             // .map(|job| async { job.run().await });
             sleep(Duration::from_secs(10)).await;
             // return Ok(());
         }
+    }
+    async fn run2(
+        &mut self,
+        job2: Jobs2,
+        // name: String,
+        // state: Vec<u8>,
+        // runner: Arc<RwLock<dyn Job + Send + Sync + 'static>>,
+    ) -> Result<(), Error> {
+        dbg!("new run");
+        let name = job2.name;
+        let ji = self
+            .job_repo
+            .get_job_info(name.as_str())
+            .await
+            .unwrap()
+            .unwrap()
+            .clone();
+        if ji.clone().should_run_now().await.unwrap() {
+            println!("yes");
+            let mut w = job2.runner.write().unwrap();
+            let xx = w.call(job2.state.clone());
+            let f = tokio::select! {
+                bar = xx => {
+                    match bar {
+                        Ok(state) => {
+                            println!("before saving state");
+                            self.job_repo.save_state(name, state).await;
+                            Ok(())
+                            }
+                        Err(_) => Err(4),
+                    }
+                }
+            }
+            .unwrap();
+        }
+        Ok(())
     }
 
     pub async fn run(&mut self) -> Result<(), Error> {
