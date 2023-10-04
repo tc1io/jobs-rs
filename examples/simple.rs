@@ -23,7 +23,7 @@ async fn main() {
     let repo = DbRepo { db };
 
     let schedule = Schedule {
-        expr: "*/2 * * * * *".to_string(),
+        expr: "* */2 * * * *".to_string(),
     };
     // if let Ok(next) = parse(schedule.expr.as_str(), &Utc::now()) {
     //     println!("when: {}", next);
@@ -117,7 +117,7 @@ impl Job for FooJob {
             }
         }
         // sleep(Duration::from_secs(10)).await;
-        println!("finising job");
+        println!("finishing job");
         Ok(state)
     }
 }
