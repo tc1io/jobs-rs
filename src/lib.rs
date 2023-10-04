@@ -6,13 +6,20 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use cron::Schedule as CronSchedule;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::fmt::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::time::{Duration as Dur, SystemTime, UNIX_EPOCH};
+use std::{fmt, println};
 use tokio::time::{sleep, Duration};
+mod test;
+
+#[derive(Debug)]
+pub enum JobError {
+    DatabaseError(String),
+    LockError(String),
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Schedule {
@@ -28,6 +35,7 @@ pub struct JobManager<R, T> {
     pub job_repo: R,
     job: Option<T>,
     job_info: Option<JobInfo>,
+    pub lock_repo: Box<dyn LockRepo + Sync + Send + 'static>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -37,6 +45,13 @@ pub struct JobInfo {
     pub state: Vec<u8>,
     pub enabled: bool,
     pub last_run: i64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct LockInfo {
+    pub status: String,
+    pub job_id: String,
+    pub ttl: Duration,
 }
 
 impl fmt::Display for JobInfo {
@@ -53,21 +68,42 @@ impl fmt::Display for Schedule {
     }
 }
 
+impl fmt::Display for LockInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Customize how JobInfo is formatted as a string here
+        write!(f, "status: {}, job_id: {}", self.status, self.job_id)
+    }
+}
+
 #[async_trait]
 pub trait JobsRepo {
-    async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, Error>;
-    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, Error>;
-    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, Error>;
+    async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, JobError>;
+    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, JobError>;
+    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, JobError>;
+}
+
+#[async_trait]
+pub trait LockRepo {
+    async fn lock_refresher1(&self) -> Result<(), JobError>;
+    async fn add_lock(&mut self, li: LockInfo) -> Result<bool, JobError>;
+    async fn get_lock(&mut self, name: &str) -> Result<Option<LockInfo>, JobError>;
 }
 
 impl<R: JobsRepo, T: Job> JobManager<R, T> {
-    pub fn new(job_repo: R) -> Self {
+    pub fn new(job_repo: R, lock_repo: impl LockRepo + Sync + Send + 'static) -> Self {
         Self {
             job_repo,
             job_info: None,
             job: None,
+            lock_repo: Box::new((lock_repo)),
         }
     }
+    // pub async fn register(
+    //     &mut self,
+    //     name: String,
+    //     schedule: Schedule,
+    //     job: impl Job + Sync + Send + 'static,
+    // ) {
 
     pub async fn register(&mut self, name: String, schedule: Schedule, job: T) {
         let name1 = name.clone();
@@ -104,12 +140,78 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
 
         self.job = Some(job);
         self.job_info = Some(job_info.clone());
-        self.job_repo
-            .create_job(job_info)
+        let r = self.job_repo.create_job(job_info).await;
+        match r {
+            Ok(_) => {
+                println!("job created successful");
+                // Ok(())
+            }
+            Err(err) => Err(JobError::DatabaseError("Failed to create job".to_string()))
+                .expect("TODO: panic message"),
+            // Err(err)
+        };
+
+        let l_info = LockInfo {
+            status: "locked".to_string(),
+            job_id: "dummy".to_string(),
+            ttl: Default::default(),
+        };
+        self.lock_repo
+            .add_lock(l_info)
             .await
             .expect("TODO: panic message");
+        match self
+            .lock_repo
+            .get_lock(name1.as_str())
+            .await
+            .expect("TODO: panic message")
+        {
+            // Some(result) => println!("Result:{} ", result),
+            Some(result) => println!("Result: {}", result),
+            None => println!("lock not found!"),
+        }
     }
 
+    //     pub async fn run(&mut self) -> Result<(), JobError> {
+    //         println!("Run");
+    //         let job = self.job.as_ref().unwrap().clone();
+    //         let ji = self.job_info.as_ref().unwrap().clone();
+    //         let xx = job.clone();
+    //
+    //         let (tx1, rx1) = oneshot::channel();
+    //         let (tx2, rx2) = oneshot::channel();
+    //
+    //
+    //
+    //
+    //         let lock_handle = tokio::spawn(async  {
+    //                 // self.lock_repo.lock_refresher1().await.expect("TODO: panic message");
+    //                 lock_refresher().await.expect("TODO: panic message").clone();
+    //                     let _ = tx1.send("done");
+    //         });
+    //
+    //         let job_handle = tokio::spawn(async move {
+    //             let new_state = job.clone().call(ji.clone().state).await.unwrap();
+    //             let _ = tx2.send("done");
+    //         });
+    //
+    //
+    //         // self.job_repo
+    //         //     .as_mut()
+    //         //     .save_state(ji.clone().name, new_state)
+    //         //     .await
+    //         //     .unwrap();
+    //
+    //         tokio::select! {
+    //             val = rx1 => {
+    //                 job_handle.abort();
+    //                 println!("rx1 completed first with {:?}", val);
+    //             }
+    //             val = rx2 => {
+    //                 lock_handle.abort();
+    //                 println!("rx2 completed first with {:?}", val);
+    //             }
+    // =======
     pub async fn start(&mut self) -> Result<(), Error> {
         loop {
             self.run().await?;
