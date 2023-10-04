@@ -130,7 +130,7 @@ impl JobsRepo for DbRepo {
         // TODO: do it without jobs ext - jobs::Schedule
         println!("create_job");
         let name = &ji.name;
-        let b = self.db.set("name", &ji);
+        let b = self.db.set(name.as_str(), &ji);
         match b {
             Ok(..) => Ok(true),
             Err(err) => {
