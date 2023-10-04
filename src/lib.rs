@@ -1,23 +1,14 @@
-// func(context.Context, func(state []byte) error, []byte) ([]byte, error)
-
-// func(context.Context, state []byte) ([]byte, error)
-
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use cron::Schedule as CronSchedule;
 use serde::{Deserialize, Serialize};
 use std::fmt::Error;
-use std::future::Future;
-use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration as Dur, SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, RwLock};
+use std::time::{Duration as Dur, UNIX_EPOCH};
 use std::{fmt, println};
-// use tokio::sync::RwLock;
 use tokio::time::{sleep, Duration};
 mod job;
-mod test;
-
 #[derive(Debug)]
 pub enum JobError {
     DatabaseError(String),
@@ -30,55 +21,18 @@ pub struct Schedule {
 }
 
 #[async_trait]
-pub trait Job {
+pub trait JobRunner {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
 }
 #[derive(Clone)]
-struct Jobs2 {
-    pub name: String,
-    pub schedule: Schedule,
-    pub state: Vec<u8>,
-    pub enabled: bool,
-    pub last_run: i64,
-    pub runner: Arc<RwLock<dyn Job + Sync + Send + 'static>>,
+pub struct Job {
+    pub job_info: JobInfo,
+    pub runner: Arc<RwLock<dyn JobRunner + Sync + Send + 'static>>,
 }
 
-// #[async_trait]
-// impl Job for Jobs2 {
-//     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
-//         todo!()
-//     }
-// }
-
-impl Jobs2 {
-    async fn run(&mut self, mut job_repo: impl JobsRepo) -> Result<(), Error> {
-        dbg!("new run");
-        let name = self.name.clone();
-        let mut w = self.runner.write().unwrap();
-        let xx = w.call(self.state.clone());
-        let f = tokio::select! {
-            bar = xx => {
-                match bar {
-                    Ok(state) => {
-                        println!("before saving state");
-                        job_repo.save_state(name, state).await;
-                        Ok(())
-                        }
-                    Err(_) => Err(4),
-                }
-            }
-        }
-        .unwrap();
-        Ok(())
-    }
-}
-
-pub struct JobManager<R, T> {
+pub struct JobManager<R> {
     pub job_repo: R,
-    job: Option<T>,
-    // jobs: Job2,
-    jobs2: Vec<Jobs2>,
-    job_info: Option<JobInfo>,
+    jobs: Vec<Job>,
     pub lock_repo: Box<dyn LockRepo + Sync + Send + 'static>,
 }
 
@@ -98,20 +52,6 @@ pub struct LockInfo {
     pub ttl: Duration,
 }
 
-impl fmt::Display for JobInfo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Customize how JobInfo is formatted as a string here
-        write!(f, "name: {}, schedule {}", self.name, self.schedule.expr)
-    }
-}
-
-impl fmt::Display for Schedule {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Customize how JobInfo is formatted as a string here
-        write!(f, "expr: {}", self.expr)
-    }
-}
-
 impl fmt::Display for LockInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Customize how JobInfo is formatted as a string here
@@ -121,9 +61,9 @@ impl fmt::Display for LockInfo {
 
 #[async_trait]
 pub trait JobsRepo {
-    async fn create_job(&mut self, job_info: JobInfo) -> Result<bool, JobError>;
-    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, JobError>;
-    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, JobError>;
+    async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError>;
+    async fn get_job(&mut self, name: &str) -> Result<Option<JobInfo>, JobError>;
+    async fn save_state(&mut self, name: &str, state: Vec<u8>) -> Result<bool, JobError>;
 }
 
 #[async_trait]
@@ -133,188 +73,83 @@ pub trait LockRepo {
     async fn get_lock(&mut self, name: &str) -> Result<Option<LockInfo>, JobError>;
 }
 
-impl<R: JobsRepo, T: Job> JobManager<R, T> {
+impl<R: JobsRepo> JobManager<R> {
     pub fn new(job_repo: R, lock_repo: impl LockRepo + Sync + Send + 'static) -> Self {
         Self {
             job_repo,
-            job_info: None,
-            job: None,
-            lock_repo: Box::new((lock_repo)),
-            jobs2: Vec::new(),
-            // jobs: Job2 {
-            //     name: "",
-            //     schedule: Schedule {
-            //         expr: "".to_string(),
-            //     },
-            //     runner: (),
-            // },
+            lock_repo: Box::new(lock_repo),
+            jobs: Vec::new(),
         }
     }
-    // pub async fn register(
-    //     &mut self,
-    //     name: String,
-    //     schedule: Schedule,
-    //     job: impl Job + Sync + Send + 'static,
-    // ) {
-
     pub async fn register(
         &mut self,
-        name: String,
+        name: &'static str,
         schedule: Schedule,
-        job: T,
-        new_job: impl Job + Sync + Send + 'static,
-    ) {
-        let name1 = name.clone();
+        job_runner: impl JobRunner + Sync + Send + 'static,
+    ) -> Result<(), JobError> {
+        let existing_job = self.job_repo.get_job(name).await?;
+        // let name1 = name.clone();
 
         let state = Vec::<u8>::new();
-        // pub fn now() -> Timestamp {
-        let duration_since_epoch = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Duration since UNI epoch must be > 0");
-        // Timestamp {
-        //     epoch: 1,
-        //     unixmillis: duration_since_epoch.as_millis() as u64,
-        // }
-        // }
-        // println!("{:?}", duration_since_epoch.as_millis().clone());
-        // println!("{:?}", Utc::now());
+        // let job_info = JobInfo {
+        //     name,
+        //     schedule: schedule.clone(),
+        //     state: state.clone(),
+        //     enabled: true,
+        //     last_run: DateTime::<Utc>::default().timestamp_millis(),
+        // };
         let job_info = JobInfo {
-            name,
+            name: name.to_string(),
             schedule: schedule.clone(),
             state: state.clone(),
             enabled: true,
             last_run: DateTime::<Utc>::default().timestamp_millis(),
         };
-        self.jobs2.push(Jobs2 {
-            name: name1.clone(),
-            schedule: schedule.clone(),
-            state: state.clone(),
-            enabled: false,
-            last_run: 0,
-            runner: Arc::new(RwLock::new(new_job)),
-        });
-
-        match self
-            .job_repo
-            .get_job_info(name1.as_str())
-            .await
-            .expect("TODO: panic message")
-        {
-            Some(result) => println!("Result:{} ", result),
-            None => println!("job not found!"),
-        }
-
-        self.job = Some(job);
-        self.job_info = Some(job_info.clone());
-        let r = self.job_repo.create_job(job_info).await;
-        match r {
-            Ok(_) => {
-                println!("job created successful");
-                // Ok(())
-            }
-            Err(err) => Err(JobError::DatabaseError("Failed to create job".to_string()))
-                .expect("TODO: panic message"),
-            // Err(err)
+        let job = Job {
+            job_info: job_info.clone(),
+            runner: Arc::new(RwLock::new(job_runner)),
         };
+        self.jobs.push(job);
+
+        let _r = self.job_repo.create_job(job_info).await?;
 
         let l_info = LockInfo {
             status: "locked".to_string(),
             job_id: "dummy".to_string(),
             ttl: Default::default(),
         };
-        self.lock_repo
-            .add_lock(l_info)
-            .await
-            .expect("TODO: panic message");
-        match self
-            .lock_repo
-            .get_lock(name1.as_str())
-            .await
-            .expect("TODO: panic message")
-        {
-            // Some(result) => println!("Result:{} ", result),
-            Some(result) => println!("Result: {}", result),
-            None => println!("lock not found!"),
-        }
+        self.lock_repo.add_lock(l_info).await?;
+        self.lock_repo.get_lock(name).await?;
+        Ok(())
     }
 
-    //     pub async fn run(&mut self) -> Result<(), JobError> {
-    //         println!("Run");
-    //         let job = self.job.as_ref().unwrap().clone();
-    //         let ji = self.job_info.as_ref().unwrap().clone();
-    //         let xx = job.clone();
-    //
-    //         let (tx1, rx1) = oneshot::channel();
-    //         let (tx2, rx2) = oneshot::channel();
-    //
-    //
-    //
-    //
-    //         let lock_handle = tokio::spawn(async  {
-    //                 // self.lock_repo.lock_refresher1().await.expect("TODO: panic message");
-    //                 lock_refresher().await.expect("TODO: panic message").clone();
-    //                     let _ = tx1.send("done");
-    //         });
-    //
-    //         let job_handle = tokio::spawn(async move {
-    //             let new_state = job.clone().call(ji.clone().state).await.unwrap();
-    //             let _ = tx2.send("done");
-    //         });
-    //
-    //
-    //         // self.job_repo
-    //         //     .as_mut()
-    //         //     .save_state(ji.clone().name, new_state)
-    //         //     .await
-    //         //     .unwrap();
-    //
-    //         tokio::select! {
-    //             val = rx1 => {
-    //                 job_handle.abort();
-    //                 println!("rx1 completed first with {:?}", val);
-    //             }
-    //             val = rx2 => {
-    //                 lock_handle.abort();
-    //                 println!("rx2 completed first with {:?}", val);
-    //             }
-    // =======
     pub async fn start(&mut self) -> Result<(), Error> {
         loop {
-            for mut job in self.jobs2.clone() {
-                self.run2(job).await.expect("TODO: panic message");
+            for mut job in self.jobs.clone() {
+                self.run(job).await.expect("TODO: panic message");
             }
-
-            // .map(|job| async { job.run().await });
             sleep(Duration::from_secs(10)).await;
-            // return Ok(());
         }
     }
-    async fn run2(
-        &mut self,
-        job2: Jobs2,
-        // name: String,
-        // state: Vec<u8>,
-        // runner: Arc<RwLock<dyn Job + Send + Sync + 'static>>,
-    ) -> Result<(), Error> {
+    async fn run(&mut self, job: Job) -> Result<(), JobError> {
         dbg!("new run");
-        let name = job2.name;
+        let name = job.clone().job_info.clone().name;
         let ji = self
             .job_repo
-            .get_job_info(name.as_str())
-            .await
-            .unwrap()
-            .unwrap()
-            .clone();
+            .get_job(name.clone().as_str())
+            .await?
+            .unwrap_or(job.clone().job_info);
+
         if ji.clone().should_run_now().await.unwrap() {
             println!("yes");
-            let mut w = job2.runner.write().unwrap();
-            let xx = w.call(job2.state.clone());
+            let mut w = job.runner.write().unwrap();
+            let xx = w.call(job.job_info.state.clone());
             let f = tokio::select! {
                 bar = xx => {
                     match bar {
                         Ok(state) => {
                             println!("before saving state");
-                            self.job_repo.save_state(name, state).await;
+                            self.job_repo.save_state(name.as_str(), state).await;
                             Ok(())
                             }
                         Err(_) => Err(4),
@@ -323,112 +158,6 @@ impl<R: JobsRepo, T: Job> JobManager<R, T> {
             }
             .unwrap();
         }
-        Ok(())
-    }
-
-    pub async fn run(&mut self) -> Result<(), Error> {
-        println!("Run");
-        // let job = self.job.as_ref().unwrap().clone();
-        let name = &self.job_info.as_ref().unwrap().name;
-        let ji = self
-            .job_repo
-            .get_job_info(name.as_str())
-            .await
-            .unwrap()
-            .unwrap()
-            .clone();
-        // let name = ji.clone().name;
-
-        if ji.clone().should_run_now().await.unwrap() {
-            println!("yes");
-
-            // let schedule = CronSchedule::from_str(ji.schedule.expr.as_str()).unwrap();
-            // let zz = schedule
-            //     .upcoming(Utc)
-            //     .next()
-            //     .map(|t| t.timestamp_millis() > Utc::now().timestamp_millis())
-            //     .unwrap_or(false);
-            // dbg!("{:?}", zz);
-            // let duration_since_epoch = SystemTime::now()
-            //     .duration_since(SystemTime::UNIX_EPOCH)
-            //     .expect("Duration since UNI epoch must be > 0");
-            //
-            // println!("{:?}", duration_since_epoch.as_millis().clone());
-            // if xx > Utc::now().timestamp_millis() {
-            //     println!("{:?}", Utc::now().timestamp_millis());
-            // }
-            // for datetime in xx.take(1) {
-            //     println!("-> {}", datetime);
-            // }
-
-            // if let Ok(next) = parse(ji.schedule.expr.as_str(), &Utc::now()) {
-            //     println!("{:?}", next.timestamp_millis());
-            //     if next > Utc::now() {
-            //         println!("when: {:?}", next);
-            //     }
-            // }
-
-            // TODO: add get_job_info().......
-            // let ji2 = self
-            //     .job_repo
-            //     .get_job_info(name.as_ref())
-            //     .await
-            //     .unwrap()
-            //     .unwrap();
-
-            // let (tx1, rx1) = oneshot::channel();
-            // let (tx2, rx2) = oneshot::channel();
-
-            // let lock_handle = tokio::spawn(async move {
-            let xx = lock_refresher();
-            let yy = self.job.as_mut().unwrap().call(ji.clone().state);
-
-            // async move{
-            //     xx.await;
-            //     yy.await;
-            // }
-            // let _ = tx1.send("done");
-            // });
-
-            // let job_handle = tokio::spawn(async move {
-            // let state = job.clone().call(ji.clone().state).await.unwrap();
-            // let _ = tx2.send(state);
-            // });
-
-            let f = tokio::select! {
-                foo = xx => {
-                    match foo {
-                        Ok(_) => Err(1),
-                        Err(_) => Err(2),
-                    }
-                }
-                bar = yy => {
-                    match bar {
-                        Ok(state) => {
-                            println!("before saving state");
-                            self.job_repo.save_state(ji.name, state).await;
-                            Ok(())
-                            }
-                        Err(_) => Err(4),
-                    }
-                }
-                // val = rx1 => {
-                //     println!("stop signal received from refresh job. stopping job now!!");
-                //     job_handle.abort();
-                //     println!("job stopped!!");
-                // }
-                // new_state = rx2 => {
-                //     let s = new_state.unwrap();
-                //     println!("stop signal received from job. stopping refresh job now!!");
-                //     self.job_repo.save_state(name, s.clone()).await.unwrap();
-                //     lock_handle.abort();
-                //     println!("refresh job stopped!!");
-                // }
-            };
-            println!("{:?}", f);
-            println!("all done!!!");
-        }
-
         Ok(())
     }
 }
@@ -484,3 +213,109 @@ async fn lock_refresher() -> Result<(), Error> {
     }
     Ok(())
 }
+//     pub async fn run(&mut self) -> Result<(), Error> {
+//         println!("Run");
+//         // let job = self.job.as_ref().unwrap().clone();
+//         let name = &self.job_info.as_ref().unwrap().name;
+//         let ji = self
+//             .job_repo
+//             .get_job_info(name.as_str())
+//             .await
+//             .unwrap()
+//             .unwrap()
+//             .clone();
+//         // let name = ji.clone().name;
+//
+//         if ji.clone().should_run_now().await.unwrap() {
+//             println!("yes");
+//
+//             // let schedule = CronSchedule::from_str(ji.schedule.expr.as_str()).unwrap();
+//             // let zz = schedule
+//             //     .upcoming(Utc)
+//             //     .next()
+//             //     .map(|t| t.timestamp_millis() > Utc::now().timestamp_millis())
+//             //     .unwrap_or(false);
+//             // dbg!("{:?}", zz);
+//             // let duration_since_epoch = SystemTime::now()
+//             //     .duration_since(SystemTime::UNIX_EPOCH)
+//             //     .expect("Duration since UNI epoch must be > 0");
+//             //
+//             // println!("{:?}", duration_since_epoch.as_millis().clone());
+//             // if xx > Utc::now().timestamp_millis() {
+//             //     println!("{:?}", Utc::now().timestamp_millis());
+//             // }
+//             // for datetime in xx.take(1) {
+//             //     println!("-> {}", datetime);
+//             // }
+//
+//             // if let Ok(next) = parse(ji.schedule.expr.as_str(), &Utc::now()) {
+//             //     println!("{:?}", next.timestamp_millis());
+//             //     if next > Utc::now() {
+//             //         println!("when: {:?}", next);
+//             //     }
+//             // }
+//
+//             // TODO: add get_job_info().......
+//             // let ji2 = self
+//             //     .job_repo
+//             //     .get_job_info(name.as_ref())
+//             //     .await
+//             //     .unwrap()
+//             //     .unwrap();
+//
+//             // let (tx1, rx1) = oneshot::channel();
+//             // let (tx2, rx2) = oneshot::channel();
+//
+//             // let lock_handle = tokio::spawn(async move {
+//             let xx = lock_refresher();
+//             let yy = self.job.as_mut().unwrap().call(ji.clone().state);
+//
+//             // async move{
+//             //     xx.await;
+//             //     yy.await;
+//             // }
+//             // let _ = tx1.send("done");
+//             // });
+//
+//             // let job_handle = tokio::spawn(async move {
+//             // let state = job.clone().call(ji.clone().state).await.unwrap();
+//             // let _ = tx2.send(state);
+//             // });
+//
+//             let f = tokio::select! {
+//                 foo = xx => {
+//                     match foo {
+//                         Ok(_) => Err(1),
+//                         Err(_) => Err(2),
+//                     }
+//                 }
+//                 bar = yy => {
+//                     match bar {
+//                         Ok(state) => {
+//                             println!("before saving state");
+//                             self.job_repo.save_state(ji.name, state).await;
+//                             Ok(())
+//                             }
+//                         Err(_) => Err(4),
+//                     }
+//                 }
+//                 // val = rx1 => {
+//                 //     println!("stop signal received from refresh job. stopping job now!!");
+//                 //     job_handle.abort();
+//                 //     println!("job stopped!!");
+//                 // }
+//                 // new_state = rx2 => {
+//                 //     let s = new_state.unwrap();
+//                 //     println!("stop signal received from job. stopping refresh job now!!");
+//                 //     self.job_repo.save_state(name, s.clone()).await.unwrap();
+//                 //     lock_handle.abort();
+//                 //     println!("refresh job stopped!!");
+//                 // }
+//             };
+//             println!("{:?}", f);
+//             println!("all done!!!");
+//         }
+//
+//         Ok(())
+//     }
+// }

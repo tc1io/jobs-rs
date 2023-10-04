@@ -1,15 +1,10 @@
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use jobs::{Job, JobError, JobInfo, JobManager, JobsRepo, LockInfo, LockRepo, Schedule};
+use jobs::{JobError, JobInfo, JobManager, JobRunner, JobsRepo, LockInfo, LockRepo, Schedule};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::fmt::Error;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::{fmt, thread};
-// use std::time::Duration;
-// use tokio::time::sleep;
 use tokio::sync::{Mutex, Semaphore};
 use tokio::time::{sleep, Duration};
 
@@ -90,10 +85,8 @@ async fn main() {
     //         }
     //     }
     // =======
-    let mut manager = JobManager::<DbRepo, FooJob>::new(repo, lc_repo);
-    manager
-        .register("dummy".to_string(), schedule, foo_job, foo_job2)
-        .await;
+    let mut manager = JobManager::<DbRepo>::new(repo, lc_repo);
+    manager.register("dummy", schedule, foo_job).await;
     // manager.run().await.unwrap();
     manager.start().await.unwrap();
 }
@@ -142,12 +135,12 @@ impl jobs::LockRepo for LkRepo {
 
 #[async_trait]
 impl JobsRepo for DbRepo {
-    async fn create_job(&mut self, ji: JobInfo) -> Result<bool, JobError> {
+    async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError> {
         // TODO: do it without jobs ext - jobs::Schedule
         println!("create_job");
-        let name = &ji.name;
-        let b = self.db.set(name.as_str(), &ji);
-        match b {
+        // let name = &job.name;
+        // let _b = self.db.set(&job.name, &job);
+        match self.db.set(&job.name, &job) {
             Ok(..) => Ok(true),
             Err(err) => {
                 Err(JobError::DatabaseError("Job creation failed".to_string()))
@@ -156,28 +149,23 @@ impl JobsRepo for DbRepo {
                 // Err(err)
             }
         }
-
-        // todo!()
     }
 
-    async fn get_job_info(&mut self, name: &str) -> Result<Option<JobInfo>, JobError> {
-        if let Some(value) = self.db.get(name) {
-            Ok(value)
-        } else {
-            Ok(None)
-        }
+    async fn get_job(&mut self, name: &str) -> Result<Option<JobInfo>, JobError> {
+        // if let Some(value) = self.db.get::<JobInfo>(name) {
+        //     Ok(Some(value))
+        // } else {
+        //     Ok(None)
+        // }
+        Ok(self.db.get::<JobInfo>(name))
     }
 
-    async fn save_state(&mut self, name: String, state: Vec<u8>) -> Result<bool, JobError> {
-        let mut job = self
-            .get_job_info(name.as_str().clone())
-            .await
-            .unwrap()
-            .unwrap();
+    async fn save_state(&mut self, name: &str, state: Vec<u8>) -> Result<bool, JobError> {
+        let mut job = self.get_job(name).await.unwrap().unwrap();
         job.state = state;
         job.last_run = Utc::now().timestamp_millis();
         dbg!("{:?}", job.last_run);
-        self.db.set(name.as_str(), &job).unwrap();
+        self.db.set(name, &job).unwrap();
         println!("state saved");
         Ok(true)
     }
@@ -197,7 +185,7 @@ struct Project {
 }
 
 #[async_trait]
-impl Job for FooJob {
+impl JobRunner for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
     // async fn call(&self, state: Vec<u8 >) -> Result<Vec<u8>, JobError> {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
