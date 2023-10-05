@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use jobs::{JobError, JobInfo, JobManager, JobRunner, JobsRepo, Lock, LockRepo, Schedule};
+use jobs::{JobError, JobInfo, JobManager, JobRunner, JobsRepo, LockData, LockRepo, Schedule};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::fmt::Error;
@@ -75,30 +75,31 @@ impl LockRepo for DbRepo {
     //     // }
     //     Ok(())
     // }
-    async fn acquire_lock(&mut self, lock: Lock) -> Result<bool, JobError> {
+    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError> {
         println!("acquire lock");
-        // // let job_lock = Arc::new(Mutex::new(()));
-        // let job_semaphore = Arc::new(Semaphore::new(2));
-        // let _lock = job_lock.lock().await;
-        // println!("Job {} is processing", lock.job_id);
-        // let s = &lock.status;
 
         // start a mutex..on file
-
-        let existing_lock = self.db.get::<Lock>(lock.job_name);
+        let mut acquire = false;
+        // TODO: try functional approach
+        let existing_lock = self.db.get::<LockData>(lock_data.job_name.as_str());
         match existing_lock {
             Some(lock) => {
-                if lock.ttl < time.now() {
-                    self.db.set(lock.job_name, &lock)?
+                if lock.expires < Utc::now().timestamp_millis() {
+                    acquire = true;
+                    // self.db.set(lock.job_name, &lock)?
                 }
             }
-            None => println!("lock empty"),
+            None => acquire = true,
         }
-        self.db.set(lock.job_name, &lock)?;
-        println!("Release the lock and permit");
-        // drop(job_semaphore);
+        self.db
+            .set(lock_data.job_name.as_str(), &lock_data)
+            .map_err(|e| JobError::DatabaseError(e.to_string()))?;
+        println!("lock acquired");
+        loop {
+            dbg!("refreshing lock");
+            sleep(Duration::from_secs(lock_data.ttl.as_secs())).await
+        }
         Ok(true)
-        // todo!()
     }
 
     // async fn get_lock(&mut self, job_id: &str) -> Result<Option<Lock>, JobError> {
@@ -117,15 +118,19 @@ impl JobsRepo for DbRepo {
         println!("create_job");
         // let name = &job.name;
         // let _b = self.db.set(&job.name, &job);
-        match self.db.set(&job.name, &job) {
-            Ok(..) => Ok(true),
-            Err(err) => {
-                Err(JobError::DatabaseError("Job creation failed".to_string()))
-                    .expect("TODO: panic message")
-                // eprintln!("JobManager run failed: {:?}", err);
-                // Err(err)
-            }
-        }
+        self.db
+            .set(&job.name, &job)
+            // .map(|| true)
+            .map_err(|e| JobError::DatabaseError(e.to_string()))?;
+        Ok(true)
+        // Ok(..) => Ok(true),
+        // Err(err) => {
+        //     Err(JobError::DatabaseError("Job creation failed".to_string()))
+        //         .expect("TODO: panic message")
+        //     // eprintln!("JobManager run failed: {:?}", err);
+        //     // Err(err)
+        // }
+        // }
     }
 
     async fn get_job(&mut self, name: &str) -> Result<Option<JobInfo>, JobError> {
@@ -225,7 +230,7 @@ async fn test_add_lock() {
     };
 
     // Create a LockInfo instance to pass to the add_lock function
-    let lock = Lock {
+    let lock = LockData {
         job_name: "job1".to_string(),
         status: "processing".to_string(),
         ttl: Default::default(),
