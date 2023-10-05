@@ -3,6 +3,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use cron::Schedule as CronSchedule;
 use serde::{Deserialize, Serialize};
 use std::fmt::Error;
+use std::ops::Add;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration as Dur, UNIX_EPOCH};
@@ -28,13 +29,20 @@ pub trait JobRunner {
 pub struct Job {
     pub job_info: JobInfo,
     pub runner: Arc<RwLock<dyn JobRunner + Sync + Send + 'static>>,
+    // pub lock: Lock,
 }
 
-pub struct JobManager<R> {
+pub struct JobManager<R, L> {
     pub job_repo: R,
+    pub lock_repo: L,
     jobs: Vec<Job>,
-    pub lock_repo: Box<dyn LockRepo + Sync + Send + 'static>,
 }
+
+// TODO: decouple job_config and job_info
+// #[derive(Clone, Serialize, Deserialize)]
+// pub struct JobConfig {
+//
+// }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct JobInfo {
@@ -43,19 +51,22 @@ pub struct JobInfo {
     pub state: Vec<u8>,
     pub enabled: bool,
     pub last_run: i64,
+    pub lock_ttl: Duration,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct LockInfo {
-    pub status: String,
-    pub job_id: String,
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct LockData {
+    // pub status: String,
+    pub job_name: String,
     pub ttl: Duration,
+    pub expires: i64,
+    pub version: i8,
 }
 
-impl fmt::Display for LockInfo {
+impl fmt::Display for LockData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Customize how JobInfo is formatted as a string here
-        write!(f, "status: {}, job_id: {}", self.status, self.job_id)
+        write!(f, "job_id: {}", self.job_name)
     }
 }
 
@@ -68,16 +79,17 @@ pub trait JobsRepo {
 
 #[async_trait]
 pub trait LockRepo {
-    async fn lock_refresher1(&self) -> Result<(), JobError>;
-    async fn add_lock(&mut self, li: LockInfo) -> Result<bool, JobError>;
-    async fn get_lock(&mut self, name: &str) -> Result<Option<LockInfo>, JobError>;
+    // async fn lock_refresher1(&self) -> Result<(), JobError>;
+    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+    // async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+    // async fn get_lock(&mut self, name: &str) -> Result<Option<Lock>, JobError>;
 }
 
-impl<R: JobsRepo> JobManager<R> {
-    pub fn new(job_repo: R, lock_repo: impl LockRepo + Sync + Send + 'static) -> Self {
+impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
+    pub fn new(job_repo: R, lock_repo: L) -> Self {
         Self {
             job_repo,
-            lock_repo: Box::new(lock_repo),
+            lock_repo,
             jobs: Vec::new(),
         }
     }
@@ -87,23 +99,18 @@ impl<R: JobsRepo> JobManager<R> {
         schedule: Schedule,
         job_runner: impl JobRunner + Sync + Send + 'static,
     ) -> Result<(), JobError> {
+        // TODO: do something with existing job.. maybe create_or_update()....
         let existing_job = self.job_repo.get_job(name).await?;
-        // let name1 = name.clone();
 
         let state = Vec::<u8>::new();
-        // let job_info = JobInfo {
-        //     name,
-        //     schedule: schedule.clone(),
-        //     state: state.clone(),
-        //     enabled: true,
-        //     last_run: DateTime::<Utc>::default().timestamp_millis(),
-        // };
         let job_info = JobInfo {
             name: name.to_string(),
             schedule: schedule.clone(),
             state: state.clone(),
             enabled: true,
             last_run: DateTime::<Utc>::default().timestamp_millis(),
+            // lock_ttl: , // TODO: get it from client
+            lock_ttl: Duration::new(10, 0),
         };
         let job = Job {
             job_info: job_info.clone(),
@@ -113,13 +120,15 @@ impl<R: JobsRepo> JobManager<R> {
 
         let _r = self.job_repo.create_job(job_info).await?;
 
-        let l_info = LockInfo {
-            status: "locked".to_string(),
-            job_id: "dummy".to_string(),
-            ttl: Default::default(),
-        };
-        self.lock_repo.add_lock(l_info).await?;
-        self.lock_repo.get_lock(name).await?;
+        // let l_info = Lock {
+        //     // status: "locked".to_string(),
+        //     job_id: job_info.name.to_string(),
+        //     ttl: Default::default(),
+        //     expires: 0,
+        //     version: 0,
+        // };
+        // self.lock_repo.add_lock(l_info).await?;
+        // self.lock_repo.get_lock(name).await?;
         Ok(())
     }
 
@@ -128,7 +137,7 @@ impl<R: JobsRepo> JobManager<R> {
             for mut job in self.jobs.clone() {
                 self.run(job).await.expect("TODO: panic message");
             }
-            sleep(Duration::from_secs(10)).await;
+            sleep(Duration::from_secs(1000)).await;
         }
     }
     async fn run(&mut self, job: Job) -> Result<(), JobError> {
@@ -142,9 +151,24 @@ impl<R: JobsRepo> JobManager<R> {
 
         if ji.clone().should_run_now().await.unwrap() {
             println!("yes");
+            // self.lock_repo.get_lock(name.as_str()).await?;
+            let lock_data = job.clone().init_lock_data().await;
+            // try to get the lock
+            // let l_info = LockInfo {
+            //     status: "locked".to_string(),
+            //     job_id: "dummy".to_string(),
+            //     ttl: Default::default(),
+            // };
+            let acquire_lock = self.lock_repo.acquire_lock(lock_data);
+            // Ok(())
             let mut w = job.runner.write().unwrap();
             let xx = w.call(job.job_info.state.clone());
             let f = tokio::select! {
+                lock = acquire_lock => {
+                    dbg!(lock);
+                    Ok(())
+                }
+
                 bar = xx => {
                     match bar {
                         Ok(state) => {
@@ -159,6 +183,19 @@ impl<R: JobsRepo> JobManager<R> {
             .unwrap();
         }
         Ok(())
+    }
+}
+
+impl Job {
+    async fn init_lock_data(&self) -> LockData {
+        return LockData {
+            job_name: self.job_info.name.clone(),
+            ttl: self.job_info.lock_ttl,
+            expires: Utc::now()
+                .timestamp_millis()
+                .add(self.job_info.lock_ttl.as_millis() as i64),
+            version: 0,
+        };
     }
 }
 
