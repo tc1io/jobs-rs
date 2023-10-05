@@ -52,15 +52,9 @@ async fn main() {
             updated: "".to_string(),
         },
     };
-    let foo_job2 = FooJob {
-        name: "".to_string(),
+    let foo_job2 = FooJob2 {
+        name: "my-job2".to_string(),
         db: project_db2,
-        project: Project {
-            name: "".to_string(),
-            id: 0,
-            lifecycle_state: "".to_string(),
-            updated: "".to_string(),
-        },
     };
 
     // let mut manager = JobManager::new(repo, lc_repo);
@@ -86,7 +80,8 @@ async fn main() {
     //     }
     // =======
     let mut manager = JobManager::<DbRepo>::new(repo, lc_repo);
-    manager.register("dummy", schedule, foo_job).await;
+    manager.register("dummy", schedule.clone(), foo_job).await;
+    manager.register("my-job2", schedule, foo_job2).await;
     // manager.run().await.unwrap();
     manager.start().await.unwrap();
 }
@@ -176,6 +171,11 @@ struct FooJob {
     project: Project,
 }
 
+struct FooJob2 {
+    name: String,
+    db: PickleDb,
+    // project: Project,
+}
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct Project {
     name: String,
@@ -184,6 +184,14 @@ struct Project {
     updated: String,
 }
 
+#[async_trait]
+impl JobRunner for FooJob2 {
+    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
+        println!("job2 started");
+        println!("job2 finished");
+        Ok(state)
+    }
+}
 #[async_trait]
 impl JobRunner for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
