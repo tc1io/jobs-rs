@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
+use futures::FutureExt;
 use jobs::{JobError, JobInfo, JobManager, JobRunner, JobsRepo, LockData, LockRepo, Schedule};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::fmt::Error;
-use std::sync::Arc;
-use tokio::sync::{Mutex, Semaphore};
+use std::ops::Add;
 use tokio::time::{sleep, Duration};
 
 #[tokio::main]
@@ -67,15 +67,7 @@ pub struct DbRepo {
 
 #[async_trait]
 impl LockRepo for DbRepo {
-    // async fn lock_refresher1(&self) -> Result<(), JobError> {
-    //     // loop {
-    //     println!("refreshing lock");
-    //     sleep(Duration::from_secs(5)).await;
-    //     println!("done");
-    //     // }
-    //     Ok(())
-    // }
-    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError> {
+    async fn acquire_refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError> {
         println!("acquire lock");
 
         // start a mutex..on file
@@ -86,7 +78,6 @@ impl LockRepo for DbRepo {
             Some(lock) => {
                 if lock.expires < Utc::now().timestamp_millis() {
                     acquire = true;
-                    // self.db.set(lock.job_name, &lock)?
                 }
             }
             None => acquire = true,
@@ -96,49 +87,54 @@ impl LockRepo for DbRepo {
             .map_err(|e| JobError::DatabaseError(e.to_string()))?;
         println!("lock acquired");
         loop {
-            dbg!("refreshing lock");
-            sleep(Duration::from_secs(lock_data.ttl.as_secs())).await
-        }
-        Ok(true)
-    }
+            println!("refreshing lock");
 
-    // async fn get_lock(&mut self, job_id: &str) -> Result<Option<Lock>, JobError> {
-    //     if let Some(value) = self.db.get(job_id) {
-    //         Ok(value)
-    //     } else {
-    //         Ok(None)
-    //     }
-    // }
+            // TODO: try functional approach
+            match self.db.get::<LockData>(lock_data.job_name.as_str()) {
+                // match existing_lock {
+                Some(mut lock) => {
+                    if lock.expires < Utc::now().timestamp_millis() {
+                        println!("lock expired. unable to refresh. Try again");
+                        Err(JobError::LockError(
+                            format!("lock expired. unable to refresh").to_string(),
+                        ))
+                        // Ok(false)
+                    } else {
+                        lock.expires = Utc::now()
+                            .timestamp_millis()
+                            .add(lock.ttl.as_millis() as i64);
+                        lock.version = lock.version.add(1);
+                        self.db
+                            .set(lock.job_name.as_str(), &lock)
+                            .map_err(|e| JobError::DatabaseError(e.to_string()))?;
+                        println!("lock refreshed");
+                        Ok(true)
+                    }
+                }
+                None => {
+                    println!("lock not found. unable to refresh. Try again");
+                    Err(JobError::LockError(
+                        format!("lock not found. unable to refresh").to_string(),
+                    ))
+                    // Ok(false)
+                }
+            }?;
+            sleep(Duration::from_secs(lock_data.ttl.as_secs() / 2)).await;
+        }
+    }
 }
 
 #[async_trait]
 impl JobsRepo for DbRepo {
     async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError> {
-        // TODO: do it without jobs ext - jobs::Schedule
         println!("create_job");
-        // let name = &job.name;
-        // let _b = self.db.set(&job.name, &job);
         self.db
             .set(&job.name, &job)
-            // .map(|| true)
-            .map_err(|e| JobError::DatabaseError(e.to_string()))?;
-        Ok(true)
-        // Ok(..) => Ok(true),
-        // Err(err) => {
-        //     Err(JobError::DatabaseError("Job creation failed".to_string()))
-        //         .expect("TODO: panic message")
-        //     // eprintln!("JobManager run failed: {:?}", err);
-        //     // Err(err)
-        // }
-        // }
+            .map(|_| Ok(true))
+            .map_err(|e| JobError::DatabaseError(e.to_string()))?
     }
 
     async fn get_job(&mut self, name: &str) -> Result<Option<JobInfo>, JobError> {
-        // if let Some(value) = self.db.get::<JobInfo>(name) {
-        //     Ok(Some(value))
-        // } else {
-        //     Ok(None)
-        // }
         Ok(self.db.get::<JobInfo>(name))
     }
 

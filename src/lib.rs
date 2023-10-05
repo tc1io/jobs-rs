@@ -80,7 +80,7 @@ pub trait JobsRepo {
 #[async_trait]
 pub trait LockRepo {
     // async fn lock_refresher1(&self) -> Result<(), JobError>;
-    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+    async fn acquire_refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
     // async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
     // async fn get_lock(&mut self, name: &str) -> Result<Option<Lock>, JobError>;
 }
@@ -137,7 +137,7 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
             for mut job in self.jobs.clone() {
                 self.run(job).await.expect("TODO: panic message");
             }
-            sleep(Duration::from_secs(1000)).await;
+            sleep(Duration::from_secs(10)).await;
         }
     }
     async fn run(&mut self, job: Job) -> Result<(), JobError> {
@@ -159,17 +159,21 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
             //     job_id: "dummy".to_string(),
             //     ttl: Default::default(),
             // };
-            let acquire_lock = self.lock_repo.acquire_lock(lock_data);
+            let acquire_lock = self.lock_repo.acquire_refresh_lock(lock_data.clone());
+            // let refresh_lock = self.lock_repo.refresh_lock(lock_data.clone());
             // Ok(())
             let mut w = job.runner.write().unwrap();
-            let xx = w.call(job.job_info.state.clone());
+            let job_runner = w.call(job.job_info.state.clone());
             let f = tokio::select! {
-                lock = acquire_lock => {
-                    dbg!(lock);
+                acquired = acquire_lock => {
+                    dbg!(acquired);
                     Ok(())
                 }
-
-                bar = xx => {
+                // refreshed = refresh_lock => {
+                //     dbg!(refreshed);
+                //     Ok(())
+                // }
+                bar = job_runner => {
                     match bar {
                         Ok(state) => {
                             println!("before saving state");
