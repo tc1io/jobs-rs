@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Error;
 use std::ops::Add;
 use std::sync::Arc;
+// use std::sync::Arc;
+use tokio::sync::RwLock;
 use tokio::time::{sleep, Duration};
 
 #[tokio::main]
@@ -34,8 +36,12 @@ async fn main() {
     )
     .unwrap();
 
-    let repo = DbRepo { db };
-    let repo2 = DbRepo { db: db2 };
+    let repo = DbRepo {
+        db: Arc::new(RwLock::new(db)),
+    };
+    let repo2 = DbRepo {
+        db: Arc::new(RwLock::new(db2)),
+    };
 
     let schedule = Schedule {
         expr: "* */2 * * * *".to_string(),
@@ -57,14 +63,14 @@ async fn main() {
 
     let mut manager = JobManager::<DbRepo, DbRepo>::new(repo, repo2);
     manager.register("dummy", schedule.clone(), foo_job).await;
-    manager.register("my-job2", schedule, foo_job2).await;
+    // manager.register("my-job2", schedule, foo_job2).await;
     // manager.run().await.unwrap();
     manager.start().await.unwrap();
 }
 
 #[derive(Clone)]
 pub struct DbRepo {
-    db: Arc<PickleDb>,
+    db: Arc<RwLock<PickleDb>>,
 }
 
 #[async_trait]
@@ -75,7 +81,13 @@ impl LockRepo for DbRepo {
         // start a mutex..on file
         let mut acquire = false;
         // TODO: try functional approach
-        let existing_lock = self.db.get::<LockData>(lock_data.job_name.as_str());
+        let existing_lock = self
+            .db
+            .write()
+            .await
+            .get::<LockData>(lock_data.job_name.as_str());
+        // .unwrap();
+        // .map_err(|e| JobError::DatabaseError(e.to_string()))?
         match existing_lock {
             Some(lock) => {
                 if lock.expires < Utc::now().timestamp_millis() {
@@ -85,6 +97,9 @@ impl LockRepo for DbRepo {
             None => acquire = true,
         }
         self.db
+            .write()
+            .await
+            // .map_err(|e| JobError::DatabaseError(e.to_string()))?
             .set(lock_data.job_name.as_str(), &lock_data)
             .map_err(|e| JobError::DatabaseError(e.to_string()))?;
         println!("lock acquired");
@@ -92,7 +107,13 @@ impl LockRepo for DbRepo {
             println!("refreshing lock");
 
             // TODO: try functional approach
-            match self.db.get::<LockData>(lock_data.job_name.as_str()) {
+            match self
+                .db
+                .write()
+                .await
+                // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+                .get::<LockData>(lock_data.job_name.as_str())
+            {
                 // match existing_lock {
                 Some(mut lock) => {
                     if lock.expires < Utc::now().timestamp_millis() {
@@ -107,6 +128,9 @@ impl LockRepo for DbRepo {
                             .add(lock.ttl.as_millis() as i64);
                         lock.version = lock.version.add(1);
                         self.db
+                            .write()
+                            .await
+                            // .map_err(|e| JobError::DatabaseError(e.to_string()))?
                             .set(lock.job_name.as_str(), &lock)
                             .map_err(|e| JobError::DatabaseError(e.to_string()))?;
                         println!("lock refreshed");
@@ -131,13 +155,21 @@ impl JobsRepo for DbRepo {
     async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError> {
         println!("create_job");
         self.db
+            .write()
+            .await
+            // .map_err(|e| JobError::DatabaseError(e.to_string()))?
             .set(&job.name, &job)
             .map(|_| Ok(true))
             .map_err(|e| JobError::DatabaseError(e.to_string()))?
     }
 
     async fn get_job(&mut self, name: &str) -> Result<Option<JobInfo>, JobError> {
-        Ok(self.db.get::<JobInfo>(name))
+        Ok(self
+            .db
+            .write()
+            .await
+            // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+            .get::<JobInfo>(name))
     }
 
     async fn save_state(&mut self, name: &str, state: Vec<u8>) -> Result<bool, JobError> {
@@ -145,7 +177,12 @@ impl JobsRepo for DbRepo {
         job.state = state;
         job.last_run = Utc::now().timestamp_millis();
         dbg!("{:?}", job.last_run);
-        self.db.set(name, &job).unwrap();
+        self.db
+            .write()
+            .await
+            // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+            .set(name, &job)
+            .unwrap();
         println!("state saved");
         Ok(true)
     }
