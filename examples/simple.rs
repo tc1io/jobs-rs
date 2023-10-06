@@ -171,8 +171,9 @@ struct Project {
 #[async_trait]
 impl JobRunner for FooJob2 {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
-        println!("job2 started");
-        println!("job2 finished");
+        println!("starting job2");
+        sleep(Duration::from_secs(10)).await;
+        println!("finishing job2");
         Ok(state)
     }
 }
@@ -181,7 +182,7 @@ impl JobRunner for FooJob {
     // type Future = Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>>>>;
     // async fn call(&self, state: Vec<u8 >) -> Result<Vec<u8>, JobError> {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
-        println!("starting job");
+        println!("starting job1");
         let all_data = self.db.get_all();
         for a in all_data {
             // println!("inside iterator");
@@ -196,7 +197,7 @@ impl JobRunner for FooJob {
             }
         }
         // sleep(Duration::from_secs(10)).await;
-        println!("finishing job");
+        println!("finishing job1");
         Ok(state)
     }
 }

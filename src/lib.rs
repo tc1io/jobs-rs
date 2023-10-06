@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use cron::Schedule as CronSchedule;
+use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
-use std::fmt::Error;
+use std::fmt::{Error, Formatter};
 use std::ops::Add;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
@@ -15,6 +16,12 @@ pub enum JobError {
     DatabaseError(String),
     LockError(String),
     JobRunError(String),
+}
+
+impl std::fmt::Display for JobError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        todo!()
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -63,13 +70,6 @@ pub struct LockData {
     pub expires: i64,
     pub version: i8,
 }
-
-// impl fmt::Display for LockData {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         // Customize how JobInfo is formatted as a string here
-//         write!(f, "job_id: {}", self.job_name)
-//     }
-// }
 
 #[async_trait]
 pub trait JobsRepo {
@@ -121,10 +121,10 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
         Ok(())
     }
 
-    pub async fn start(&mut self) -> Result<(), Error> {
+    pub async fn start(&mut self) -> Result<(), JobError> {
         loop {
             for mut job in self.jobs.clone() {
-                self.run(job).await.expect("TODO: panic message");
+                self.run(job).await?;
             }
             sleep(Duration::from_secs(10)).await;
         }
@@ -139,6 +139,7 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
             .unwrap_or(job.clone().job_info);
 
         if ji.clone().should_run_now()? {
+
             println!("yes");
             let mut w = job
                 .runner
@@ -167,6 +168,7 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
                                 }
                             Err(_) => Err(4),
                         }
+
                     }
                 }
                 .map_err(|e| JobError::JobRunError(e.to_string()))?;
