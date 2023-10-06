@@ -7,7 +7,7 @@ use std::ops::Add;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration as Dur, UNIX_EPOCH};
-use std::{fmt, println};
+use std::{fmt, format, println};
 use tokio::time::{sleep, Duration};
 mod job;
 #[derive(Debug)]
@@ -80,7 +80,8 @@ pub trait JobsRepo {
 
 #[async_trait]
 pub trait LockRepo {
-    async fn acquire_refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+    async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
 }
 
 impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
@@ -139,16 +140,23 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
 
         if ji.clone().should_run_now()? {
             println!("yes");
-            let lock_data = job.clone().init_lock_data();
-            let acquire_lock = self.lock_repo.acquire_refresh_lock(lock_data.clone());
             let mut w = job
                 .runner
                 .write()
                 .map_err(|e| JobError::LockError(e.to_string()))?;
+
+            let lock_data = job.clone().init_lock_data();
+            let lock_data1 = lock_data.clone();
+
+            let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone()).await.is_ok();
+            if acquire_lock {
+                println!("lock acquired");
+            let refresh_lock = self.lock_repo.refresh_lock(lock_data1);
             let job_runner = w.call(job.job_info.state.clone());
+
             let f = tokio::select! {
-                acquired = acquire_lock => {
-                    dbg!(acquired);
+                refreshed = refresh_lock => {
+                    dbg!(refreshed);
                     Ok(())
                 }
                 bar = job_runner => {
@@ -162,8 +170,9 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
                     }
                 }
             }
-            .map_err(|e| JobError::JobRunError(e.to_string()))?;
+                .map_err(|e| JobError::JobRunError(e.to_string()))?;
         }
+    }
         Ok(())
     }
 }

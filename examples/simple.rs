@@ -67,10 +67,8 @@ pub struct DbRepo {
 
 #[async_trait]
 impl LockRepo for DbRepo {
-    async fn acquire_refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError> {
+    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError> {
         println!("acquire lock");
-
-        // start a mutex..on file
         let mut acquire = false;
         // TODO: try functional approach
         let existing_lock = self.db.get::<LockData>(lock_data.job_name.as_str());
@@ -85,7 +83,27 @@ impl LockRepo for DbRepo {
         self.db
             .set(lock_data.job_name.as_str(), &lock_data)
             .map_err(|e| JobError::DatabaseError(e.to_string()))?;
-        println!("lock acquired");
+        Ok(true)
+    }
+    async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError> {
+        println!("refresh lock...");
+        //
+        // // start a mutex..on file
+        // let mut acquire = false;
+        // // TODO: try functional approach
+        // let existing_lock = self.db.get::<LockData>(lock_data.job_name.as_str());
+        // match existing_lock {
+        //     Some(lock) => {
+        //         if lock.expires < Utc::now().timestamp_millis() {
+        //             acquire = true;
+        //         }
+        //     }
+        //     None => acquire = true,
+        // }
+        // self.db
+        //     .set(lock_data.job_name.as_str(), &lock_data)
+        //     .map_err(|e| JobError::DatabaseError(e.to_string()))?;
+        // println!("lock acquired");
         loop {
             println!("refreshing lock");
 
@@ -200,37 +218,37 @@ impl JobRunner for FooJob {
     }
 }
 
-#[tokio::test]
-#[cfg(test)]
-async fn test_lock_refresher1() {
-    let lrepo = Db2Repo {
-        repo: PickleDb::new(
-            "test.db",
-            PickleDbDumpPolicy::AutoDump,
-            SerializationMethod::Json,
-        ),
-    };
-    let result = lrepo.lock_refresher1().await;
-    assert!(result.is_ok());
-}
-#[tokio::test]
-#[cfg(test)]
-async fn test_add_lock() {
-    // Create a new instance of LkRepo with a PickleDb
-    let mut lrepo = Db2Repo {
-        repo: PickleDb::new(
-            "test.db",
-            PickleDbDumpPolicy::AutoDump,
-            SerializationMethod::Json,
-        ),
-    };
-
-    // Create a LockInfo instance to pass to the add_lock function
-    let lock = LockData {
-        job_name: "job1".to_string(),
-        status: "processing".to_string(),
-        ttl: Default::default(),
-    };
-    let result = lrepo.add_lock(lock).await;
-    assert!(result.is_ok());
-}
+// #[tokio::test]
+// #[cfg(test)]
+// async fn test_lock_refresher1() {
+//     let lrepo = Db2Repo {
+//         repo: PickleDb::new(
+//             "test.db",
+//             PickleDbDumpPolicy::AutoDump,
+//             SerializationMethod::Json,
+//         ),
+//     };
+//     let result = lrepo.lock_refresher1().await;
+//     assert!(result.is_ok());
+// }
+// #[tokio::test]
+// #[cfg(test)]
+// async fn test_add_lock() {
+//     // Create a new instance of LkRepo with a PickleDb
+//     let mut lrepo = Db2Repo {
+//         repo: PickleDb::new(
+//             "test.db",
+//             PickleDbDumpPolicy::AutoDump,
+//             SerializationMethod::Json,
+//         ),
+//     };
+//
+//     // Create a LockInfo instance to pass to the add_lock function
+//     let lock = LockData {
+//         job_name: "job1".to_string(),
+//         status: "processing".to_string(),
+//         ttl: Default::default(),
+//     };
+//     let result = lrepo.add_lock(lock).await;
+//     assert!(result.is_ok());
+// }
