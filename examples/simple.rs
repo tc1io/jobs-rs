@@ -183,6 +183,7 @@ impl JobRunner for FooJob {
     // async fn call(&self, state: Vec<u8 >) -> Result<Vec<u8>, JobError> {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
         println!("starting job1");
+        let mut sleep_interval = interval(Duration::from_secs(1));
         let all_data = self.db.get_all();
         for a in all_data {
             // println!("inside iterator");
@@ -193,7 +194,8 @@ impl JobRunner for FooJob {
                     .set(format!("{:?}", data.id.clone()).as_str(), &data)
                     .unwrap();
                 println!("{:?}", data);
-                sleep(Duration::from_secs(1)).await;
+                // sleep(Duration::from_secs(1)).await;
+                sleep_interval.tick().await;
             }
         }
         // sleep(Duration::from_secs(10)).await;
