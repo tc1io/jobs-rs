@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use cron::Schedule as CronSchedule;
+use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
-use std::fmt::Error;
+use std::fmt::{Error, Formatter};
 use std::ops::Add;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
@@ -15,6 +16,12 @@ pub enum JobError {
     DatabaseError(String),
     LockError(String),
     JobRunError(String),
+}
+
+impl std::fmt::Display for JobError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        todo!()
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -63,13 +70,6 @@ pub struct LockData {
     pub expires: i64,
     pub version: i8,
 }
-
-// impl fmt::Display for LockData {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         // Customize how JobInfo is formatted as a string here
-//         write!(f, "job_id: {}", self.job_name)
-//     }
-// }
 
 #[async_trait]
 pub trait JobsRepo {
@@ -120,10 +120,10 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
         Ok(())
     }
 
-    pub async fn start(&mut self) -> Result<(), Error> {
+    pub async fn start(&mut self) -> Result<(), JobError> {
         loop {
             for mut job in self.jobs.clone() {
-                self.run(job).await.expect("TODO: panic message");
+                self.run(job).await?;
             }
             sleep(Duration::from_secs(10)).await;
         }
@@ -138,7 +138,6 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
             .unwrap_or(job.clone().job_info);
 
         if ji.clone().should_run_now()? {
-            println!("yes");
             let lock_data = job.clone().init_lock_data();
             let acquire_lock = self.lock_repo.acquire_refresh_lock(lock_data.clone());
             let mut w = job
@@ -146,15 +145,20 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
                 .write()
                 .map_err(|e| JobError::LockError(e.to_string()))?;
             let job_runner = w.call(job.job_info.state.clone());
-            let f = tokio::select! {
+            let _f = tokio::select! {
                 acquired = acquire_lock => {
-                    dbg!(acquired);
                     Ok(())
                 }
                 bar = job_runner => {
+                    // bar
+                    // .map(|state| async {self.job_repo
+                    //     .save_state(name.as_str(), state)
+                    //     .await}?)
+                    //     // .map(|xx| Ok(xx))
+                    //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
+                    // .map_err(|e| JobError::JobRunError(e.to_string()))?
                     match bar {
                         Ok(state) => {
-                            println!("before saving state");
                             self.job_repo.save_state(name.as_str(), state).await;
                             Ok(())
                             }
