@@ -87,23 +87,6 @@ impl LockRepo for DbRepo {
     }
     async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError> {
         println!("refresh lock...");
-        //
-        // // start a mutex..on file
-        // let mut acquire = false;
-        // // TODO: try functional approach
-        // let existing_lock = self.db.get::<LockData>(lock_data.job_name.as_str());
-        // match existing_lock {
-        //     Some(lock) => {
-        //         if lock.expires < Utc::now().timestamp_millis() {
-        //             acquire = true;
-        //         }
-        //     }
-        //     None => acquire = true,
-        // }
-        // self.db
-        //     .set(lock_data.job_name.as_str(), &lock_data)
-        //     .map_err(|e| JobError::DatabaseError(e.to_string()))?;
-        // println!("lock acquired");
         loop {
             println!("refreshing lock");
 
