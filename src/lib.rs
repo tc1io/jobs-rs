@@ -150,28 +150,28 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
 
             if acquire_lock {
                 println!("acquired");
-            let refresh_lock = self.lock_repo.refresh_lock(lock_data);
-            let job_runner = w.call(job.job_info.state.clone());
+                let refresh_lock = self.lock_repo.refresh_lock(lock_data);
+                let job_runner = w.call(job.job_info.state.clone());
 
-            let f = tokio::select! {
-                refreshed = refresh_lock => {
-                    dbg!(refreshed);
-                    Ok(())
-                }
-                bar = job_runner => {
-                    match bar {
-                        Ok(state) => {
-                            println!("before saving state");
-                            self.job_repo.save_state(name.as_str(), state).await;
-                            Ok(())
-                            }
-                        Err(_) => Err(4),
+                let f = tokio::select! {
+                    refreshed = refresh_lock => {
+                        dbg!(refreshed);
+                        Ok(())
+                    }
+                    bar = job_runner => {
+                        match bar {
+                            Ok(state) => {
+                                println!("before saving state");
+                                self.job_repo.save_state(name.as_str(), state).await;
+                                Ok(())
+                                }
+                            Err(_) => Err(4),
+                        }
                     }
                 }
-            }
                 .map_err(|e| JobError::JobRunError(e.to_string()))?;
+            }
         }
-    }
         Ok(())
     }
 }
