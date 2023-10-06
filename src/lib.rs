@@ -115,12 +115,17 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
         };
         self.jobs.push(job);
 
+        // TODO calling this in register will lead to DB operation in server startup - better
+        // to defer until start()
         let _r = self.job_repo.create_job(job_info).await?;
 
         Ok(())
     }
 
     pub async fn start(&mut self) -> Result<(), JobError> {
+        // TODO I would make one excutor per job, so all job executors can organize
+        // themse;ves individually. so in start() you'd only start the executors
+        // and they the do they per-job logic.
         loop {
             for mut job in self.jobs.clone() {
                 self.run(job).await?;
@@ -137,6 +142,7 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
             .await?
             .unwrap_or(job.clone().job_info);
 
+        // Return early if should-not-run - that avoids the long if block
         if ji.clone().should_run_now()? {
             let lock_data = job.clone().init_lock_data();
             let acquire_lock = self.lock_repo.acquire_refresh_lock(lock_data.clone());
