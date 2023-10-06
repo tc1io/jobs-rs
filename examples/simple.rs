@@ -127,12 +127,14 @@ impl LockRepo for DbRepo {
                             .timestamp_millis()
                             .add(lock.ttl.as_millis() as i64);
                         lock.version = lock.version.add(1);
-                        self.db
+                        let foo = self
+                            .db
                             .write()
                             .await
                             // .map_err(|e| JobError::DatabaseError(e.to_string()))?
                             .set(lock.job_name.as_str(), &lock)
-                            .map_err(|e| JobError::DatabaseError(e.to_string()))?;
+                            .map_err(|e| JobError::DatabaseError(e.to_string()))
+                            .unwrap();
                         println!("lock refreshed");
                         Ok(true)
                     }
@@ -145,6 +147,7 @@ impl LockRepo for DbRepo {
                     // Ok(false)
                 }
             }?;
+            dbg!("here");
             sleep(Duration::from_secs(lock_data.ttl.as_secs() / 2)).await;
         }
     }

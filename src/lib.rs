@@ -90,26 +90,31 @@ impl<J: JobsRepo + Send + Sync + Clone, L: LockRepo + Send + Sync + Clone> Run f
             let job_runner = w.call(self.job.job_info.clone().state.clone());
             let _f = tokio::select! {
                 acquired = acquire_lock => {
-                    Ok(())
+                    match acquired {
+                        Ok(x) => Ok(x),
+                        Err(e) => Err(e),
+                    };
+                    // Ok(1)
                 }
-                bar = job_runner => {
-                    // bar
-                    // .map(|state| async {self.job_repo
-                    //     .save_state(name.as_str(), state)
-                    //     .await}?)
-                    //     // .map(|xx| Ok(xx))
-                    //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
-                    // .map_err(|e| JobError::JobRunError(e.to_string()))?
-                    match bar {
-                        Ok(state) => {
-                            self.job_repo.save_state(name.as_str(), state).await;
-                            Ok(())
-                            }
-                        Err(_) => Err(4),
-                    }
-                }
-            }
-            .map_err(|e| JobError::JobRunError(e.to_string()))?;
+                // bar = job_runner => {
+                //     // bar
+                //     // .map(|state| async {self.job_repo
+                //     //     .save_state(name.as_str(), state)
+                //     //     .await}?)
+                //     //     // .map(|xx| Ok(xx))
+                //     //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
+                //     // .map_err(|e| JobError::JobRunError(e.to_string()))?
+                //     match bar {
+                //         Ok(state) => {
+                //             self.job_repo.save_state(name.as_str(), state).await;
+                //             Ok(())
+                //             }
+                //         Err(_) => Err(4),
+                //     }
+                // }
+            };
+            // .unwrap();
+            // .map_err(|e| JobError::JobRunError(e.to_string()))?;
         }
         Ok(())
     }
@@ -202,8 +207,9 @@ impl<J: JobsRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMa
             // job_info,
             // runner: Arc::new(RwLock::new(job_runner)),
         };
-        let _r = self.job_repo.create_job(job_info).await?;
-        ex.run2().await.unwrap();
+        let _r = self.job_repo.create_job(job_info.clone()).await?;
+        self.executors.insert(job_info.name.to_string(), ex);
+        // ex.run2().await.unwrap();
         // let run_fn = self.run2(Arc::new(RwLock::new(job_runner)), job_info.clone());
 
         // let job2 = Job2 {
@@ -220,12 +226,12 @@ impl<J: JobsRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMa
     pub async fn start(&mut self) -> Result<(), JobError> {
         dbg!("inside start");
         loop {
-            // for (k, v) in self.executors.iter_mut() {
-            //     // v.run2().await.unwrap();
-            // }
-            for mut job in self.jobs.clone() {
-                self.run(job).await?;
+            for (k, v) in self.executors.iter_mut() {
+                v.run2().await.unwrap();
             }
+            // for mut job in self.jobs.clone() {
+            //     self.run(job).await?;
+            // }
             sleep(Duration::from_secs(10)).await;
         }
     }
