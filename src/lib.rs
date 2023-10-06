@@ -8,7 +8,7 @@ use std::ops::Add;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration as Dur, UNIX_EPOCH};
-use std::{fmt, println};
+use std::{fmt, format, println};
 use tokio::time::{sleep, Duration};
 mod job;
 #[derive(Debug)]
@@ -80,7 +80,8 @@ pub trait JobsRepo {
 
 #[async_trait]
 pub trait LockRepo {
-    async fn acquire_refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+    async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
 }
 
 impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
@@ -138,35 +139,40 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
             .unwrap_or(job.clone().job_info);
 
         if ji.clone().should_run_now()? {
-            let lock_data = job.clone().init_lock_data();
-            let acquire_lock = self.lock_repo.acquire_refresh_lock(lock_data.clone());
+
+            println!("yes");
             let mut w = job
                 .runner
                 .write()
                 .map_err(|e| JobError::LockError(e.to_string()))?;
-            let job_runner = w.call(job.job_info.state.clone());
-            let _f = tokio::select! {
-                acquired = acquire_lock => {
-                    Ok(())
-                }
-                bar = job_runner => {
-                    // bar
-                    // .map(|state| async {self.job_repo
-                    //     .save_state(name.as_str(), state)
-                    //     .await}?)
-                    //     // .map(|xx| Ok(xx))
-                    //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
-                    // .map_err(|e| JobError::JobRunError(e.to_string()))?
-                    match bar {
-                        Ok(state) => {
-                            self.job_repo.save_state(name.as_str(), state).await;
-                            Ok(())
-                            }
-                        Err(_) => Err(4),
+
+            let lock_data = job.clone().init_lock_data();
+            let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone()).await?;
+
+            if acquire_lock {
+                println!("acquired");
+                let refresh_lock = self.lock_repo.refresh_lock(lock_data);
+                let job_runner = w.call(job.job_info.state.clone());
+
+                let f = tokio::select! {
+                    refreshed = refresh_lock => {
+                        dbg!(refreshed);
+                        Ok(())
+                    }
+                    bar = job_runner => {
+                        match bar {
+                            Ok(state) => {
+                                println!("before saving state");
+                                self.job_repo.save_state(name.as_str(), state).await;
+                                Ok(())
+                                }
+                            Err(_) => Err(4),
+                        }
+
                     }
                 }
+                .map_err(|e| JobError::JobRunError(e.to_string()))?;
             }
-            .map_err(|e| JobError::JobRunError(e.to_string()))?;
         }
         Ok(())
     }
