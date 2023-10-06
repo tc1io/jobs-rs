@@ -116,7 +116,7 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
         };
         self.jobs.push(job);
 
-        let _r = self.job_repo.create_job(job_info).await?;
+        // let _r = self.job_repo.create_job(job_info).await?;
 
         Ok(())
     }
@@ -137,6 +137,8 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
             .get_job(name.clone().as_str())
             .await?
             .unwrap_or(job.clone().job_info);
+
+        let _r = self.job_repo.create_job(ji.clone()).await?;
 
         if ji.clone().should_run_now()? {
 
