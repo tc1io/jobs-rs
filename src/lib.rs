@@ -14,6 +14,7 @@ mod job;
 pub enum JobError {
     DatabaseError(String),
     LockError(String),
+    JobRunError(String),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -63,12 +64,12 @@ pub struct LockData {
     pub version: i8,
 }
 
-impl fmt::Display for LockData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Customize how JobInfo is formatted as a string here
-        write!(f, "job_id: {}", self.job_name)
-    }
-}
+// impl fmt::Display for LockData {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         // Customize how JobInfo is formatted as a string here
+//         write!(f, "job_id: {}", self.job_name)
+//     }
+// }
 
 #[async_trait]
 pub trait JobsRepo {
@@ -79,10 +80,7 @@ pub trait JobsRepo {
 
 #[async_trait]
 pub trait LockRepo {
-    // async fn lock_refresher1(&self) -> Result<(), JobError>;
     async fn acquire_refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
-    // async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
-    // async fn get_lock(&mut self, name: &str) -> Result<Option<Lock>, JobError>;
 }
 
 impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
@@ -99,7 +97,7 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
         schedule: Schedule,
         job_runner: impl JobRunner + Sync + Send + 'static,
     ) -> Result<(), JobError> {
-        // TODO: do something with existing job.. maybe create_or_update()....
+        // TODO: do something with existing job.. maybe change to create_or_update()....
         let existing_job = self.job_repo.get_job(name).await?;
 
         let state = Vec::<u8>::new();
@@ -109,8 +107,7 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
             state: state.clone(),
             enabled: true,
             last_run: DateTime::<Utc>::default().timestamp_millis(),
-            // lock_ttl: , // TODO: get it from client
-            lock_ttl: Duration::new(10, 0),
+            lock_ttl: Duration::new(10, 0), // TODO: get it from client
         };
         let job = Job {
             job_info: job_info.clone(),
@@ -120,15 +117,6 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
 
         let _r = self.job_repo.create_job(job_info).await?;
 
-        // let l_info = Lock {
-        //     // status: "locked".to_string(),
-        //     job_id: job_info.name.to_string(),
-        //     ttl: Default::default(),
-        //     expires: 0,
-        //     version: 0,
-        // };
-        // self.lock_repo.add_lock(l_info).await?;
-        // self.lock_repo.get_lock(name).await?;
         Ok(())
     }
 
@@ -149,30 +137,20 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
             .await?
             .unwrap_or(job.clone().job_info);
 
-        if ji.clone().should_run_now().await.unwrap() {
+        if ji.clone().should_run_now()? {
             println!("yes");
-            // self.lock_repo.get_lock(name.as_str()).await?;
-            let lock_data = job.clone().init_lock_data().await;
-            // try to get the lock
-            // let l_info = LockInfo {
-            //     status: "locked".to_string(),
-            //     job_id: "dummy".to_string(),
-            //     ttl: Default::default(),
-            // };
+            let lock_data = job.clone().init_lock_data();
             let acquire_lock = self.lock_repo.acquire_refresh_lock(lock_data.clone());
-            // let refresh_lock = self.lock_repo.refresh_lock(lock_data.clone());
-            // Ok(())
-            let mut w = job.runner.write().unwrap();
+            let mut w = job
+                .runner
+                .write()
+                .map_err(|e| JobError::LockError(e.to_string()))?;
             let job_runner = w.call(job.job_info.state.clone());
             let f = tokio::select! {
                 acquired = acquire_lock => {
                     dbg!(acquired);
                     Ok(())
                 }
-                // refreshed = refresh_lock => {
-                //     dbg!(refreshed);
-                //     Ok(())
-                // }
                 bar = job_runner => {
                     match bar {
                         Ok(state) => {
@@ -184,14 +162,14 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
                     }
                 }
             }
-            .unwrap();
+            .map_err(|e| JobError::JobRunError(e.to_string()))?;
         }
         Ok(())
     }
 }
 
 impl Job {
-    async fn init_lock_data(&self) -> LockData {
+    fn init_lock_data(&self) -> LockData {
         return LockData {
             job_name: self.job_info.name.clone(),
             ttl: self.job_info.lock_ttl,
@@ -204,7 +182,7 @@ impl Job {
 }
 
 impl JobInfo {
-    async fn should_run_now(self) -> Result<bool, Error> {
+    fn should_run_now(self) -> Result<bool, JobError> {
         if !self.enabled {
             return Ok(false);
         }
@@ -240,20 +218,20 @@ impl JobInfo {
     }
 }
 
-async fn lock_refresher() -> Result<(), Error> {
-    // use a future loop function instead
-    // use select along with timer
-
-    loop {
-        println!("refreshing lock");
-        // Err(Error::,)
-        sleep(Duration::from_secs(10)).await;
-        // Ok(())
-        // sleep(Duration::from_millis(100));
-        // println!("done");
-    }
-    Ok(())
-}
+// // async fn lock_refresher() -> Result<(), Error> {
+// //     // use a future loop function instead
+// //     // use select along with timer
+// //
+// //     loop {
+// //         println!("refreshing lock");
+// //         // Err(Error::,)
+// //         sleep(Duration::from_secs(10)).await;
+// //         // Ok(())
+// //         // sleep(Duration::from_millis(100));
+// //         // println!("done");
+// //     }
+// //     Ok(())
+// }
 //     pub async fn run(&mut self) -> Result<(), Error> {
 //         println!("Run");
 //         // let job = self.job.as_ref().unwrap().clone();
