@@ -3,7 +3,9 @@ use chrono::{DateTime, TimeZone, Utc};
 use cron::Schedule as CronSchedule;
 use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::{Error, Formatter};
+use std::future::Future;
 use std::ops::Add;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
@@ -39,10 +41,89 @@ pub struct Job {
     pub runner: Arc<RwLock<dyn JobRunner + Sync + Send + 'static>>,
     // pub lock: Lock,
 }
+#[derive(Clone)]
+pub struct Job2 {
+    pub job_info: JobInfo,
+    // run: dyn Run,
+}
 
-pub struct JobManager<R, L> {
-    pub job_repo: R,
+#[async_trait]
+trait Run {
+    async fn run2(
+        &mut self,
+        // runner: Arc<RwLock<dyn JobRunner + Sync + Send + 'static>>,
+        // job_info: JobInfo,
+    ) -> Result<(), JobError>;
+}
+pub struct Executor<J, L>
+where
+    J: Send,
+    L: Send,
+{
+    // name: String,
+    job_repo: J,
+    lock_repo: L,
+    job_info: JobInfo,
+    runner: Arc<RwLock<dyn JobRunner + Sync + Send + 'static>>,
+}
+
+#[async_trait]
+impl<J: JobsRepo + Send, L: LockRepo + Send> Run for Executor<J, L> {
+    async fn run2(
+        &mut self,
+        // runner: Arc<RwLock<dyn JobRunner + Sync + Send + 'static>>,
+    ) -> Result<(), JobError> {
+        dbg!("new run2");
+        let name = self.job_info.clone().name;
+        let ji = self
+            .job_repo
+            .get_job(name.clone().as_str())
+            .await?
+            .unwrap_or(self.job_info.clone());
+
+        if ji.clone().should_run_now()? {
+            let lock_data = self.job_info.clone().init_lock_data();
+            let acquire_lock = self.lock_repo.acquire_refresh_lock(lock_data.clone());
+            let mut w = self
+                .runner
+                .write()
+                .map_err(|e| JobError::LockError(e.to_string()))?;
+            let job_runner = w.call(self.job_info.clone().state.clone());
+            let _f = tokio::select! {
+                acquired = acquire_lock => {
+                    Ok(())
+                }
+                bar = job_runner => {
+                    // bar
+                    // .map(|state| async {self.job_repo
+                    //     .save_state(name.as_str(), state)
+                    //     .await}?)
+                    //     // .map(|xx| Ok(xx))
+                    //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
+                    // .map_err(|e| JobError::JobRunError(e.to_string()))?
+                    match bar {
+                        Ok(state) => {
+                            self.job_repo.save_state(name.as_str(), state).await;
+                            Ok(())
+                            }
+                        Err(_) => Err(4),
+                    }
+                }
+            }
+            .map_err(|e| JobError::JobRunError(e.to_string()))?;
+        }
+        Ok(())
+    }
+}
+
+pub struct JobManager<J, L>
+where
+    J: Send,
+    L: Send,
+{
+    pub job_repo: J,
     pub lock_repo: L,
+    executors: HashMap<String, Executor<J, L>>,
     jobs: Vec<Job>,
 }
 
@@ -83,11 +164,12 @@ pub trait LockRepo {
     async fn acquire_refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
 }
 
-impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
-    pub fn new(job_repo: R, lock_repo: L) -> Self {
+impl<J: JobsRepo + Clone + Send, L: LockRepo + Clone + Send> JobManager<J, L> {
+    pub fn new(job_repo: J, lock_repo: L) -> Self {
         Self {
             job_repo,
             lock_repo,
+            executors: HashMap::new(),
             jobs: Vec::new(),
         }
     }
@@ -109,77 +191,140 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
             last_run: DateTime::<Utc>::default().timestamp_millis(),
             lock_ttl: Duration::new(10, 0), // TODO: get it from client
         };
-        let job = Job {
-            job_info: job_info.clone(),
-            runner: Arc::new(RwLock::new(job_runner)),
+        let ex = Executor {
+            job_repo: self.job_repo.clone(),
+            lock_repo: self.lock_repo.clone(),
+            job_info,
+            // runner: Arc::new(RwLock::new(job_runner)),
         };
-        self.jobs.push(job);
+        // let job = Job {
+        //     job_info: job_info.clone(),
+        //     // runner: Arc::new(RwLock::new(job_runner)),
+        //     runner: Arc::new(RwLock::new(&job_runner)),
+        // };
+        // let run_fn = self.run2(Arc::new(RwLock::new(job_runner)), job_info.clone());
 
-        let _r = self.job_repo.create_job(job_info).await?;
+        // let job2 = Job2 {
+        //     job_info: job_info.clone(),
+        //     run: run_fn,
+        //     // runner: Arc::new(RwLock::new(job_runner)),
+        // };
+        // self.jobs.push(job.clone());
+        self.executors.insert(name.to_string(), ex);
+
+        // let _r = self.job_repo.create_job(job_info).await?;
 
         Ok(())
     }
 
     pub async fn start(&mut self) -> Result<(), JobError> {
         loop {
-            for mut job in self.jobs.clone() {
-                self.run(job).await?;
+            for (k, v) in self.executors.iter_mut() {
+                v.run2().await.expect("TODO: panic message");
             }
-            sleep(Duration::from_secs(10)).await;
+            // for mut job in self.jobs.clone() {
+            //     self.run(job).await?;
+            // }
+            // sleep(Duration::from_secs(10)).await;
         }
     }
-    async fn run(&mut self, job: Job) -> Result<(), JobError> {
-        dbg!("new run");
-        let name = job.clone().job_info.clone().name;
-        let ji = self
-            .job_repo
-            .get_job(name.clone().as_str())
-            .await?
-            .unwrap_or(job.clone().job_info);
-
-        if ji.clone().should_run_now()? {
-            let lock_data = job.clone().init_lock_data();
-            let acquire_lock = self.lock_repo.acquire_refresh_lock(lock_data.clone());
-            let mut w = job
-                .runner
-                .write()
-                .map_err(|e| JobError::LockError(e.to_string()))?;
-            let job_runner = w.call(job.job_info.state.clone());
-            let _f = tokio::select! {
-                acquired = acquire_lock => {
-                    Ok(())
-                }
-                bar = job_runner => {
-                    // bar
-                    // .map(|state| async {self.job_repo
-                    //     .save_state(name.as_str(), state)
-                    //     .await}?)
-                    //     // .map(|xx| Ok(xx))
-                    //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
-                    // .map_err(|e| JobError::JobRunError(e.to_string()))?
-                    match bar {
-                        Ok(state) => {
-                            self.job_repo.save_state(name.as_str(), state).await;
-                            Ok(())
-                            }
-                        Err(_) => Err(4),
-                    }
-                }
-            }
-            .map_err(|e| JobError::JobRunError(e.to_string()))?;
-        }
-        Ok(())
-    }
+    // async fn run2(
+    //     &mut self,
+    //     runner: Arc<RwLock<dyn JobRunner + Sync + Send + 'static>>,
+    //     job_info: JobInfo,
+    // ) -> Result<(), JobError> {
+    //     dbg!("new run2");
+    //     let name = job_info.clone().name;
+    //     let ji = self
+    //         .job_repo
+    //         .get_job(name.clone().as_str())
+    //         .await?
+    //         .unwrap_or(job_info.clone());
+    //
+    //     if ji.clone().should_run_now()? {
+    //         let lock_data = job_info.clone().init_lock_data();
+    //         let acquire_lock = self.lock_repo.acquire_refresh_lock(lock_data.clone());
+    //         let mut w = runner
+    //             .write()
+    //             .map_err(|e| JobError::LockError(e.to_string()))?;
+    //         let job_runner = w.call(job_info.clone().state.clone());
+    //         let _f = tokio::select! {
+    //             acquired = acquire_lock => {
+    //                 Ok(())
+    //             }
+    //             bar = job_runner => {
+    //                 // bar
+    //                 // .map(|state| async {self.job_repo
+    //                 //     .save_state(name.as_str(), state)
+    //                 //     .await}?)
+    //                 //     // .map(|xx| Ok(xx))
+    //                 //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
+    //                 // .map_err(|e| JobError::JobRunError(e.to_string()))?
+    //                 match bar {
+    //                     Ok(state) => {
+    //                         self.job_repo.save_state(name.as_str(), state).await;
+    //                         Ok(())
+    //                         }
+    //                     Err(_) => Err(4),
+    //                 }
+    //             }
+    //         }
+    //         .map_err(|e| JobError::JobRunError(e.to_string()))?;
+    //     }
+    //     Ok(())
+    // }
+    // async fn run(&mut self, job: JobInfo) -> Result<(), JobError> {
+    //     dbg!("new run");
+    //     let name = job.clone().job_info.clone().name;
+    //     let ji = self
+    //         .job_repo
+    //         .get_job(name.clone().as_str())
+    //         .await?
+    //         .unwrap_or(job.clone().job_info);
+    //
+    //     if ji.clone().should_run_now()? {
+    //         let lock_data = job.clone().init_lock_data();
+    //         let acquire_lock = self.lock_repo.acquire_refresh_lock(lock_data.clone());
+    //         let mut w = job
+    //             .runner
+    //             .write()
+    //             .map_err(|e| JobError::LockError(e.to_string()))?;
+    //         let job_runner = w.call(job.job_info.state.clone());
+    //         let _f = tokio::select! {
+    //             acquired = acquire_lock => {
+    //                 Ok(())
+    //             }
+    //             bar = job_runner => {
+    //                 // bar
+    //                 // .map(|state| async {self.job_repo
+    //                 //     .save_state(name.as_str(), state)
+    //                 //     .await}?)
+    //                 //     // .map(|xx| Ok(xx))
+    //                 //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
+    //                 // .map_err(|e| JobError::JobRunError(e.to_string()))?
+    //                 match bar {
+    //                     Ok(state) => {
+    //                         self.job_repo.save_state(name.as_str(), state).await;
+    //                         Ok(())
+    //                         }
+    //                     Err(_) => Err(4),
+    //                 }
+    //             }
+    //         }
+    //         .map_err(|e| JobError::JobRunError(e.to_string()))?;
+    //     }
+    //     Ok(())
+    // }
 }
 
-impl Job {
+impl JobInfo {
     fn init_lock_data(&self) -> LockData {
         return LockData {
-            job_name: self.job_info.name.clone(),
-            ttl: self.job_info.lock_ttl,
+            job_name: self.name.clone(),
+            ttl: self.lock_ttl,
             expires: Utc::now()
                 .timestamp_millis()
-                .add(self.job_info.lock_ttl.as_millis() as i64),
+                .add(self.lock_ttl.as_millis() as i64),
             version: 0,
         };
     }

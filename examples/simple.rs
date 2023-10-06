@@ -61,6 +61,7 @@ async fn main() {
     manager.start().await.unwrap();
 }
 
+#[derive(Clone)]
 pub struct DbRepo {
     db: PickleDb,
 }
