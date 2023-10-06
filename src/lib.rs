@@ -146,12 +146,11 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
                 .map_err(|e| JobError::LockError(e.to_string()))?;
 
             let lock_data = job.clone().init_lock_data();
-            let lock_data1 = lock_data.clone();
+            let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone()).await?;
 
-            let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone()).await.is_ok();
             if acquire_lock {
-                println!("lock acquired");
-            let refresh_lock = self.lock_repo.refresh_lock(lock_data1);
+                println!("acquired");
+            let refresh_lock = self.lock_repo.refresh_lock(lock_data);
             let job_runner = w.call(job.job_info.state.clone());
 
             let f = tokio::select! {
