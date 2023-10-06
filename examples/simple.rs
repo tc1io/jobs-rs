@@ -6,6 +6,7 @@ use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::fmt::Error;
 use std::ops::Add;
+use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 
 #[tokio::main]
@@ -63,7 +64,7 @@ async fn main() {
 
 #[derive(Clone)]
 pub struct DbRepo {
-    db: PickleDb,
+    db: Arc<PickleDb>,
 }
 
 #[async_trait]
