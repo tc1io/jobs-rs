@@ -122,6 +122,9 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
     }
 
     pub async fn start(&mut self) -> Result<(), JobError> {
+        // TODO I would make one excutor per job, so all job executors can organize
+        // themse;ves individually. so in start() you'd only start the executors
+        // and they the do they per-job logic.
         loop {
             for mut job in self.jobs.clone() {
                 self.run(job).await?;
@@ -140,8 +143,8 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
 
         let _r = self.job_repo.create_job(ji.clone()).await?;
 
+        // Return early if should-not-run - that avoids the long if block
         if ji.clone().should_run_now()? {
-
             println!("yes");
             let mut w = job
                 .runner
