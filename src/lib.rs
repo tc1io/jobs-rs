@@ -3,12 +3,15 @@ use chrono::{DateTime, TimeZone, Utc};
 use cron::Schedule as CronSchedule;
 use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::{Error, Formatter};
+use std::future::Future;
 use std::ops::Add;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration as Dur, UNIX_EPOCH};
 use std::{fmt, format, println};
+use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 mod job;
 #[derive(Debug)]
@@ -30,19 +33,113 @@ pub struct Schedule {
 }
 
 #[async_trait]
-pub trait JobRunner {
+pub trait JobRunner: Send + Sync {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
 }
 #[derive(Clone)]
 pub struct Job {
     pub job_info: JobInfo,
-    pub runner: Arc<RwLock<dyn JobRunner + Sync + Send + 'static>>,
+    pub runner: Arc<Mutex<dyn JobRunner + Sync + Send + 'static>>,
     // pub lock: Lock,
 }
+#[derive(Clone)]
+pub struct Job2 {
+    pub job_info: JobInfo,
+    // run: dyn Run,
+}
 
-pub struct JobManager<R, L> {
-    pub job_repo: R,
+#[async_trait]
+trait Run {
+    async fn run2(
+        &mut self,
+        // runner: Arc<RwLock<dyn JobRunner + Sync + Send + 'static>>,
+        // job_info: JobInfo,
+    ) -> Result<(), JobError>;
+}
+pub struct Executor<J, L>
+where
+    J: Send + Sync + Clone,
+    L: Send + Sync + Clone,
+{
+    // name: String,
+    job_repo: J,
+    lock_repo: L,
+    job: Job,
+    // job_info: JobInfo,
+    // runner: Arc<Mutex<dyn JobRunner + Sync + Send + 'static>>,
+}
+
+#[async_trait]
+impl<J: JobsRepo + Send + Sync + Clone, L: LockRepo + Send + Sync + Clone> Run for Executor<J, L> {
+    // async fn run3(job_repo: JobsRepo, )
+    // async fn run(&mut self, job: Job) -> Result<(), JobError>
+    async fn run2(&mut self) -> Result<(), JobError> {
+        dbg!("new run2");
+        let name = self.job.job_info.clone().name;
+        let ji = self
+            .job_repo
+            .get_job(name.clone().as_str())
+            .await?
+            .unwrap_or(self.job.job_info.clone());
+
+        if ji.clone().should_run_now()? {
+            // println!("yes");
+            let mut w = self.job.runner.lock().await;
+
+            let lock_data = self.job.clone().job_info.init_lock_data();
+            let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone()).await?;
+
+            if acquire_lock {
+                println!("acquired");
+                let refresh_lock = self.lock_repo.refresh_lock(lock_data);
+                let job_runner = w.call(self.job.job_info.state.clone());
+                // dbg!("yes");
+                // let lock_data = self.job.job_info.clone().init_lock_data();
+                // let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone());
+                // let mut w = self.job.runner.lock().await;
+                // .map_err(|e| JobError::LockError(e.to_string()))?;
+                // let job_runner = w.call(self.job.job_info.clone().state.clone());
+                let _f = tokio::select! {
+                    acquired = refresh_lock => {
+                        match acquired {
+                            Ok(x) => Ok(x),
+                            Err(e) => Err(e),
+                        }
+                        // Ok(1)
+                    }
+                    bar = job_runner => {
+                        // bar
+                        // .map(|state| async {self.job_repo
+                        //     .save_state(name.as_str(), state)
+                        //     .await}?)
+                        //     // .map(|xx| Ok(xx))
+                        //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
+                        // .map_err(|e| JobError::JobRunError(e.to_string()))?
+                        match bar {
+                            Ok(state) => {
+                                self.job_repo.save_state(name.as_str(), state).await;
+                                Ok(true)
+                                }
+                            Err(e) => Err(JobError::DatabaseError(e.to_string())),
+                        }
+                    }
+                }
+                // .unwrap();
+                .map_err(|e| JobError::JobRunError(e.to_string()))?;
+            }
+        }
+        Ok(())
+    }
+}
+
+pub struct JobManager<J, L>
+where
+    J: Clone + Send + Sync,
+    L: Clone + Send + Sync,
+{
+    pub job_repo: J,
     pub lock_repo: L,
+    executors: HashMap<String, Executor<J, L>>,
     jobs: Vec<Job>,
 }
 
@@ -84,11 +181,12 @@ pub trait LockRepo {
     async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
 }
 
-impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
-    pub fn new(job_repo: R, lock_repo: L) -> Self {
+impl<J: JobsRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobManager<J, L> {
+    pub fn new(job_repo: J, lock_repo: L) -> Self {
         Self {
             job_repo,
             lock_repo,
+            executors: HashMap::new(),
             jobs: Vec::new(),
         }
     }
@@ -112,23 +210,48 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
         };
         let job = Job {
             job_info: job_info.clone(),
-            runner: Arc::new(RwLock::new(job_runner)),
+            // runner: Arc::new(RwLock::new(job_runner)),
+            runner: Arc::new(Mutex::new(job_runner)),
         };
-        self.jobs.push(job);
+        let mut ex = Executor {
+            job_repo: self.job_repo.clone(),
+            lock_repo: self.lock_repo.clone(),
+            job,
+            // job_info,
+            // runner: Arc::new(RwLock::new(job_runner)),
+        };
+        let _r = self.job_repo.create_job(job_info.clone()).await?;
+        self.executors.insert(job_info.name.to_string(), ex);
+        // ex.run2().await.unwrap();
+        // let run_fn = self.run2(Arc::new(RwLock::new(job_runner)), job_info.clone());
 
-        // let _r = self.job_repo.create_job(job_info).await?;
-
+        // <<<<<<< HEAD
+        //         // let job2 = Job2 {
+        //         //     job_info: job_info.clone(),
+        //         //     run: run_fn,
+        //         //     // runner: Arc::new(RwLock::new(job_runner)),
+        //         // };
+        //         // self.jobs.push(job.clone());
+        //         // self.executors.insert(name.to_string(), ex);
+        // =======
+        //         // let _r = self.job_repo.create_job(job_info).await?;
+        // >>>>>>> master
+        //
         Ok(())
     }
 
     pub async fn start(&mut self) -> Result<(), JobError> {
+        dbg!("inside start");
         // TODO I would make one excutor per job, so all job executors can organize
         // themse;ves individually. so in start() you'd only start the executors
         // and they the do they per-job logic.
         loop {
-            for mut job in self.jobs.clone() {
-                self.run(job).await?;
+            for (k, v) in self.executors.iter_mut() {
+                v.run2().await.unwrap();
             }
+            // for mut job in self.jobs.clone() {
+            //     self.run(job).await?;
+            // }
             sleep(Duration::from_secs(10)).await;
         }
     }
@@ -145,13 +268,33 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
 
         // Return early if should-not-run - that avoids the long if block
         if ji.clone().should_run_now()? {
+            // let lock_data = job.clone().job_info.init_lock_data();
+            // let acquire_lock = self.lock_repo.acquire_refresh_lock(lock_data.clone());
+            // let mut w = job.runner.lock().await;
+            // // .map_err(|e| JobError::LockError(e.to_string()))?;
+            // let job_runner = w.call(job.job_info.state.clone());
+            // let _f = tokio::select! {
+            //         acquired = acquire_lock => {
+            //             Ok(())
+            //         }
+            //         bar = job_runner => {
+            //             // bar
+            //             // .map(|state| async {self.job_repo
+            //             //     .save_state(name.as_str(), state)
+            //             //     .await}?)
+            //             //     // .map(|xx| Ok(xx))
+            //             //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
+            //             // .map_err(|e| JobError::JobRunError(e.to_string()))?
+            //             match bar {
+            //                 Ok(state) => {
+            //                     self.job_repo.save_state(name.as_str(), state).await;
+            //                     Ok(())
+            //                     }
+            //                 Err(_) => Err(4),
             println!("yes");
-            let mut w = job
-                .runner
-                .write()
-                .map_err(|e| JobError::LockError(e.to_string()))?;
+            let mut w = job.runner.lock().await;
 
-            let lock_data = job.clone().init_lock_data();
+            let lock_data = job.clone().job_info.init_lock_data();
             let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone()).await?;
 
             if acquire_lock {
@@ -183,14 +326,14 @@ impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
     }
 }
 
-impl Job {
+impl JobInfo {
     fn init_lock_data(&self) -> LockData {
         return LockData {
-            job_name: self.job_info.name.clone(),
-            ttl: self.job_info.lock_ttl,
+            job_name: self.name.clone(),
+            ttl: self.lock_ttl,
             expires: Utc::now()
                 .timestamp_millis()
-                .add(self.job_info.lock_ttl.as_millis() as i64),
+                .add(self.lock_ttl.as_millis() as i64),
             version: 0,
         };
     }
@@ -201,7 +344,7 @@ impl JobInfo {
         if !self.enabled {
             return Ok(false);
         }
-        dbg!("{:?}", self.last_run);
+        dbg!("", self.last_run);
         if self.last_run.eq(&0) {
             return Ok(true);
         }
