@@ -83,38 +83,50 @@ impl<J: JobsRepo + Send + Sync + Clone, L: LockRepo + Send + Sync + Clone> Run f
             .unwrap_or(self.job.job_info.clone());
 
         if ji.clone().should_run_now()? {
-            let lock_data = self.job.job_info.clone().init_lock_data();
-            let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone());
+            // println!("yes");
             let mut w = self.job.runner.lock().await;
-            // .map_err(|e| JobError::LockError(e.to_string()))?;
-            let job_runner = w.call(self.job.job_info.clone().state.clone());
-            let _f = tokio::select! {
-                acquired = acquire_lock => {
-                    match acquired {
-                        Ok(x) => Ok(x),
-                        Err(e) => Err(e),
-                    };
-                    // Ok(1)
+
+            let lock_data = self.job.clone().job_info.init_lock_data();
+            let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone()).await?;
+
+            if acquire_lock {
+                println!("acquired");
+                let refresh_lock = self.lock_repo.refresh_lock(lock_data);
+                let job_runner = w.call(self.job.job_info.state.clone());
+                // dbg!("yes");
+                // let lock_data = self.job.job_info.clone().init_lock_data();
+                // let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone());
+                // let mut w = self.job.runner.lock().await;
+                // .map_err(|e| JobError::LockError(e.to_string()))?;
+                // let job_runner = w.call(self.job.job_info.clone().state.clone());
+                let _f = tokio::select! {
+                    acquired = refresh_lock => {
+                        match acquired {
+                            Ok(x) => Ok(x),
+                            Err(e) => Err(e),
+                        }
+                        // Ok(1)
+                    }
+                    bar = job_runner => {
+                        // bar
+                        // .map(|state| async {self.job_repo
+                        //     .save_state(name.as_str(), state)
+                        //     .await}?)
+                        //     // .map(|xx| Ok(xx))
+                        //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
+                        // .map_err(|e| JobError::JobRunError(e.to_string()))?
+                        match bar {
+                            Ok(state) => {
+                                self.job_repo.save_state(name.as_str(), state).await;
+                                Ok(true)
+                                }
+                            Err(e) => Err(JobError::DatabaseError(e.to_string())),
+                        }
+                    }
                 }
-                // bar = job_runner => {
-                //     // bar
-                //     // .map(|state| async {self.job_repo
-                //     //     .save_state(name.as_str(), state)
-                //     //     .await}?)
-                //     //     // .map(|xx| Ok(xx))
-                //     //     // .map_err(|e| JobError::JobRunError(e.to_string()))?})
-                //     // .map_err(|e| JobError::JobRunError(e.to_string()))?
-                //     match bar {
-                //         Ok(state) => {
-                //             self.job_repo.save_state(name.as_str(), state).await;
-                //             Ok(())
-                //             }
-                //         Err(_) => Err(4),
-                //     }
-                // }
-            };
-            // .unwrap();
-            // .map_err(|e| JobError::JobRunError(e.to_string()))?;
+                // .unwrap();
+                .map_err(|e| JobError::JobRunError(e.to_string()))?;
+            }
         }
         Ok(())
     }
@@ -332,7 +344,7 @@ impl JobInfo {
         if !self.enabled {
             return Ok(false);
         }
-        dbg!("{:?}", self.last_run);
+        dbg!("", self.last_run);
         if self.last_run.eq(&0) {
             return Ok(true);
         }

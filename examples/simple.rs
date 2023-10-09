@@ -103,10 +103,9 @@ impl LockRepo for DbRepo {
         Ok(true)
     }
     async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError> {
-        println!("refresh lock...");
         let mut refresh_interval = interval(Duration::from_secs(lock_data.ttl.as_secs() / 2));
         loop {
-            refresh_interval.tick().await;
+            // refresh_interval.tick().await;
             println!("refreshing lock");
 
             // TODO: try functional approach
@@ -119,6 +118,7 @@ impl LockRepo for DbRepo {
             {
                 // match existing_lock {
                 Some(mut lock) => {
+                    dbg!("some");
                     if lock.expires < Utc::now().timestamp_millis() {
                         println!("lock expired. unable to refresh. Try again");
                         Err(JobError::LockError(
@@ -126,17 +126,19 @@ impl LockRepo for DbRepo {
                         ))
                         // Ok(false)
                     } else {
+                        dbg!("some else");
                         lock.expires = Utc::now()
                             .timestamp_millis()
                             .add(lock.ttl.as_millis() as i64);
                         lock.version = lock.version.add(1);
+                        dbg!(lock_data.job_name.as_str());
                         let foo = self
                             .db
                             .write()
                             .await
                             // .map_err(|e| JobError::DatabaseError(e.to_string()))?
                             .set(lock.job_name.as_str(), &lock)
-                            .map_err(|e| JobError::DatabaseError(e.to_string()))
+                            // .map_err(|e| JobError::DatabaseError(e.to_string()))
                             .unwrap();
                         println!("lock refreshed");
                         Ok(true)
@@ -238,7 +240,7 @@ impl JobRunner for FooJob {
                     .unwrap();
                 println!("{:?}", data);
                 // sleep(Duration::from_secs(1)).await;
-                sleep_interval.tick().await;
+                // sleep_interval.tick().await;
             }
         }
         // sleep(Duration::from_secs(10)).await;
