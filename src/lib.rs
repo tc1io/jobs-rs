@@ -1,18 +1,27 @@
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use cron::Schedule as CronSchedule;
+use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
-use std::fmt::Error;
+use std::fmt::{Error, Formatter};
+use std::ops::Add;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration as Dur, UNIX_EPOCH};
-use std::{fmt, println};
+use std::{fmt, format, println};
 use tokio::time::{sleep, Duration};
 mod job;
 #[derive(Debug)]
 pub enum JobError {
     DatabaseError(String),
     LockError(String),
+    JobRunError(String),
+}
+
+impl std::fmt::Display for JobError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        todo!()
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -28,13 +37,20 @@ pub trait JobRunner {
 pub struct Job {
     pub job_info: JobInfo,
     pub runner: Arc<RwLock<dyn JobRunner + Sync + Send + 'static>>,
+    // pub lock: Lock,
 }
 
-pub struct JobManager<R> {
+pub struct JobManager<R, L> {
     pub job_repo: R,
+    pub lock_repo: L,
     jobs: Vec<Job>,
-    pub lock_repo: Box<dyn LockRepo + Sync + Send + 'static>,
 }
+
+// TODO: decouple job_config and job_info
+// #[derive(Clone, Serialize, Deserialize)]
+// pub struct JobConfig {
+//
+// }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct JobInfo {
@@ -43,20 +59,16 @@ pub struct JobInfo {
     pub state: Vec<u8>,
     pub enabled: bool,
     pub last_run: i64,
+    pub lock_ttl: Duration,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct LockInfo {
-    pub status: String,
-    pub job_id: String,
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct LockData {
+    // pub status: String,
+    pub job_name: String,
     pub ttl: Duration,
-}
-
-impl fmt::Display for LockInfo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Customize how JobInfo is formatted as a string here
-        write!(f, "status: {}, job_id: {}", self.status, self.job_id)
-    }
+    pub expires: i64,
+    pub version: i8,
 }
 
 #[async_trait]
@@ -68,16 +80,15 @@ pub trait JobsRepo {
 
 #[async_trait]
 pub trait LockRepo {
-    async fn lock_refresher1(&self) -> Result<(), JobError>;
-    async fn add_lock(&mut self, li: LockInfo) -> Result<bool, JobError>;
-    async fn get_lock(&mut self, name: &str) -> Result<Option<LockInfo>, JobError>;
+    async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
 }
 
-impl<R: JobsRepo> JobManager<R> {
-    pub fn new(job_repo: R, lock_repo: impl LockRepo + Sync + Send + 'static) -> Self {
+impl<R: JobsRepo, L: LockRepo> JobManager<R, L> {
+    pub fn new(job_repo: R, lock_repo: L) -> Self {
         Self {
             job_repo,
-            lock_repo: Box::new(lock_repo),
+            lock_repo,
             jobs: Vec::new(),
         }
     }
@@ -87,23 +98,17 @@ impl<R: JobsRepo> JobManager<R> {
         schedule: Schedule,
         job_runner: impl JobRunner + Sync + Send + 'static,
     ) -> Result<(), JobError> {
+        // TODO: do something with existing job.. maybe change to create_or_update()....
         let existing_job = self.job_repo.get_job(name).await?;
-        // let name1 = name.clone();
 
         let state = Vec::<u8>::new();
-        // let job_info = JobInfo {
-        //     name,
-        //     schedule: schedule.clone(),
-        //     state: state.clone(),
-        //     enabled: true,
-        //     last_run: DateTime::<Utc>::default().timestamp_millis(),
-        // };
         let job_info = JobInfo {
             name: name.to_string(),
             schedule: schedule.clone(),
             state: state.clone(),
             enabled: true,
             last_run: DateTime::<Utc>::default().timestamp_millis(),
+            lock_ttl: Duration::new(10, 0), // TODO: get it from client
         };
         let job = Job {
             job_info: job_info.clone(),
@@ -111,22 +116,15 @@ impl<R: JobsRepo> JobManager<R> {
         };
         self.jobs.push(job);
 
-        let _r = self.job_repo.create_job(job_info).await?;
+        // let _r = self.job_repo.create_job(job_info).await?;
 
-        let l_info = LockInfo {
-            status: "locked".to_string(),
-            job_id: "dummy".to_string(),
-            ttl: Default::default(),
-        };
-        self.lock_repo.add_lock(l_info).await?;
-        self.lock_repo.get_lock(name).await?;
         Ok(())
     }
 
-    pub async fn start(&mut self) -> Result<(), Error> {
+    pub async fn start(&mut self) -> Result<(), JobError> {
         loop {
             for mut job in self.jobs.clone() {
-                self.run(job).await.expect("TODO: panic message");
+                self.run(job).await?;
             }
             sleep(Duration::from_secs(10)).await;
         }
@@ -140,30 +138,63 @@ impl<R: JobsRepo> JobManager<R> {
             .await?
             .unwrap_or(job.clone().job_info);
 
-        if ji.clone().should_run_now().await.unwrap() {
+        let _r = self.job_repo.create_job(ji.clone()).await?;
+
+        if ji.clone().should_run_now()? {
+
             println!("yes");
-            let mut w = job.runner.write().unwrap();
-            let xx = w.call(job.job_info.state.clone());
-            let f = tokio::select! {
-                bar = xx => {
-                    match bar {
-                        Ok(state) => {
-                            println!("before saving state");
-                            self.job_repo.save_state(name.as_str(), state).await;
-                            Ok(())
-                            }
-                        Err(_) => Err(4),
+            let mut w = job
+                .runner
+                .write()
+                .map_err(|e| JobError::LockError(e.to_string()))?;
+
+            let lock_data = job.clone().init_lock_data();
+            let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone()).await?;
+
+            if acquire_lock {
+                println!("acquired");
+                let refresh_lock = self.lock_repo.refresh_lock(lock_data);
+                let job_runner = w.call(job.job_info.state.clone());
+
+                let f = tokio::select! {
+                    refreshed = refresh_lock => {
+                        dbg!(refreshed);
+                        Ok(())
+                    }
+                    bar = job_runner => {
+                        match bar {
+                            Ok(state) => {
+                                println!("before saving state");
+                                self.job_repo.save_state(name.as_str(), state).await;
+                                Ok(())
+                                }
+                            Err(_) => Err(4),
+                        }
+
                     }
                 }
+                .map_err(|e| JobError::JobRunError(e.to_string()))?;
             }
-            .unwrap();
         }
         Ok(())
     }
 }
 
+impl Job {
+    fn init_lock_data(&self) -> LockData {
+        return LockData {
+            job_name: self.job_info.name.clone(),
+            ttl: self.job_info.lock_ttl,
+            expires: Utc::now()
+                .timestamp_millis()
+                .add(self.job_info.lock_ttl.as_millis() as i64),
+            version: 0,
+        };
+    }
+}
+
 impl JobInfo {
-    async fn should_run_now(self) -> Result<bool, Error> {
+    fn should_run_now(self) -> Result<bool, JobError> {
         if !self.enabled {
             return Ok(false);
         }
@@ -199,20 +230,20 @@ impl JobInfo {
     }
 }
 
-async fn lock_refresher() -> Result<(), Error> {
-    // use a future loop function instead
-    // use select along with timer
-
-    loop {
-        println!("refreshing lock");
-        // Err(Error::,)
-        sleep(Duration::from_secs(10)).await;
-        // Ok(())
-        // sleep(Duration::from_millis(100));
-        // println!("done");
-    }
-    Ok(())
-}
+// // async fn lock_refresher() -> Result<(), Error> {
+// //     // use a future loop function instead
+// //     // use select along with timer
+// //
+// //     loop {
+// //         println!("refreshing lock");
+// //         // Err(Error::,)
+// //         sleep(Duration::from_secs(10)).await;
+// //         // Ok(())
+// //         // sleep(Duration::from_millis(100));
+// //         // println!("done");
+// //     }
+// //     Ok(())
+// }
 //     pub async fn run(&mut self) -> Result<(), Error> {
 //         println!("Run");
 //         // let job = self.job.as_ref().unwrap().clone();

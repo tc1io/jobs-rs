@@ -102,7 +102,7 @@ This project is licensed under the [XXXXXXXX](LICENSE) LICENSE.
 
 ## Author
 
-Aravind Ragavendran, 
+Aravind Ragavendran,
 Ashesh Mishra
 
 Feel free to modify this README to suit your project's needs, including adding more details, usage examples, and contact information.

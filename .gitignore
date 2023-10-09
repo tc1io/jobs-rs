@@ -27,4 +27,5 @@ Cargo.lock
 
 example.db
 project.db
+lock.db
 /.idea/
