@@ -1,26 +1,8 @@
-// use crate::Schedule;
-// use std::fmt::Error;
-//
-// pub struct Job2 {
-//     name: &'static str,
-//     schedule: Schedule,
-//     runner: fn(state: Vec<u8>) -> Result<Vec<u8>, Error>,
-// }
-//
-// impl Job2 {
-//     fn init() -> Self {
-//         return Job2 {
-//             name: "",
-//             schedule: Schedule {
-//                 expr: "".to_string(),
-//             },
-//             runner: (),
-//         };
-//     }
-//
-//     fn runner_init() -> fn(state: Vec<u8>) -> Result<Vec<u8>, Error> {
-//         return fn(state: Vec<u8>) -> Result<Vec<u8>, Error> {
-//
-//         }
-//     }
-// }
+use async_trait::async_trait;
+
+#[async_trait]
+pub trait JobRepo {
+    // async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError>;
+    // async fn get_job(&mut self, name: &str) -> Result<Option<JobInfo>, JobError>;
+    // async fn save_state(&mut self, name: &str, state: Vec<u8>) -> Result<bool, JobError>;
+}
