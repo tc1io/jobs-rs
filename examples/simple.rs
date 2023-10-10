@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Error;
 use std::ops::Add;
 use std::sync::Arc;
-// use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, sleep, Duration};
 
@@ -75,47 +74,19 @@ pub struct DbRepo {
 
 #[async_trait]
 impl LockRepo for DbRepo {
-    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError> {
-        println!("acquire lock");
-        let mut acquire = false;
-        // TODO: try functional approach
-        let existing_lock = self
-            .db
-            .write()
-            .await
-            .get::<LockData>(lock_data.job_name.as_str());
-        // .unwrap();
-        // .map_err(|e| JobError::DatabaseError(e.to_string()))?
-        match existing_lock {
-            Some(lock) => {
-                if lock.expires < Utc::now().timestamp_millis() {
-                    acquire = true;
-                }
-            }
-            None => acquire = true,
-        }
-        self.db
-            .write()
-            .await
-            // .map_err(|e| JobError::DatabaseError(e.to_string()))?
-            .set(lock_data.job_name.as_str(), &lock_data)
-            .map_err(|e| JobError::DatabaseError(e.to_string()))?;
-        Ok(true)
-    }
     async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError> {
         let mut refresh_interval = interval(Duration::from_secs(lock_data.ttl.as_secs() / 2));
         loop {
-            // refresh_interval.tick().await;
+            refresh_interval.tick().await;
             println!("refreshing lock");
-
             // TODO: try functional approach
-            match self
+            let existing_lock = self
                 .db
-                .write()
+                .read()
                 .await
                 // .map_err(|e| JobError::DatabaseError(e.to_string()))?
-                .get::<LockData>(lock_data.job_name.as_str())
-            {
+                .get::<LockData>(lock_data.job_name.as_str());
+            match existing_lock {
                 // match existing_lock {
                 Some(mut lock) => {
                     dbg!("some");
@@ -131,15 +102,25 @@ impl LockRepo for DbRepo {
                             .timestamp_millis()
                             .add(lock.ttl.as_millis() as i64);
                         lock.version = lock.version.add(1);
-                        dbg!(lock_data.job_name.as_str());
-                        let foo = self
-                            .db
+                        dbg!(lock.job_name.as_str());
+                        self.db
                             .write()
                             .await
-                            // .map_err(|e| JobError::DatabaseError(e.to_string()))?
                             .set(lock.job_name.as_str(), &lock)
-                            // .map_err(|e| JobError::DatabaseError(e.to_string()))
-                            .unwrap();
+                            .map_err(|e| JobError::DatabaseError(e.to_string()))?;
+                        // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+                        // .set(lock.job_name.as_str(), &lock)
+                        // .await
+                        // .map_err(|e| JobError::DatabaseError(e.to_string()))?;
+                        // sleep_interval.tick().await;
+                        // let foo = self
+                        //     .db
+                        //     .write()
+                        //     .await
+                        //     // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+                        //     .set::<LockData>(lock.job_name.as_str(), &lock)
+                        //     // .map_err(|e| JobError::DatabaseError(e.to_string()))
+                        //     .unwrap();
                         println!("lock refreshed");
                         Ok(true)
                     }
@@ -154,6 +135,35 @@ impl LockRepo for DbRepo {
             dbg!("here");
             sleep(Duration::from_secs(lock_data.ttl.as_secs() / 2)).await;
         }
+    }
+    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError> {
+        println!("acquire lock");
+        let mut acquire = false;
+        // TODO: try functional approach
+        let existing_lock = self
+            .db
+            .read()
+            .await
+            .get::<LockData>(lock_data.job_name.as_str());
+        // .unwrap();
+        // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+        match existing_lock {
+            Some(lock) => {
+                if lock.expires < Utc::now().timestamp_millis() {
+                    acquire = true;
+                }
+            }
+            None => acquire = true,
+        }
+        if acquire {
+            self.db
+                .write()
+                .await
+                // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+                .set(lock_data.job_name.as_str(), &lock_data)
+                .map_err(|e| JobError::DatabaseError(e.to_string()))?;
+        }
+        Ok(true)
     }
 }
 
@@ -239,7 +249,7 @@ impl JobRunner for FooJob {
                     .set(format!("{:?}", data.id.clone()).as_str(), &data)
                     .unwrap();
                 println!("{:?}", data);
-                // sleep(Duration::from_secs(1)).await;
+                sleep(Duration::from_secs(1)).await;
                 // sleep_interval.tick().await;
             }
         }

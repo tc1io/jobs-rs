@@ -23,7 +23,8 @@ pub enum JobError {
 
 impl std::fmt::Display for JobError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        todo!()
+        Ok(())
+        // todo!()
     }
 }
 
@@ -93,12 +94,6 @@ impl<J: JobsRepo + Send + Sync + Clone, L: LockRepo + Send + Sync + Clone> Run f
                 println!("acquired");
                 let refresh_lock = self.lock_repo.refresh_lock(lock_data);
                 let job_runner = w.call(self.job.job_info.state.clone());
-                // dbg!("yes");
-                // let lock_data = self.job.job_info.clone().init_lock_data();
-                // let acquire_lock = self.lock_repo.acquire_lock(lock_data.clone());
-                // let mut w = self.job.runner.lock().await;
-                // .map_err(|e| JobError::LockError(e.to_string()))?;
-                // let job_runner = w.call(self.job.job_info.clone().state.clone());
                 let _f = tokio::select! {
                     acquired = refresh_lock => {
                         match acquired {
@@ -247,7 +242,7 @@ impl<J: JobsRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMa
         // and they the do they per-job logic.
         loop {
             for (k, v) in self.executors.iter_mut() {
-                v.run2().await.unwrap();
+                v.run2().await?;
             }
             // for mut job in self.jobs.clone() {
             //     self.run(job).await?;
