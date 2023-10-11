@@ -14,4 +14,5 @@ futures = { version = "0.3", default-features = false }
 pickledb = "0.5.1"
 chrono = {version = "0.4.31", features = ["default"]}
 cron = "0.12.0"
+derive_more = "0.99.17"
 

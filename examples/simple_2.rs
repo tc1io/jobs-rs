@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use futures::FutureExt;
 // use jobs::{JobError, JobInfo, JobManager, JobRepo, JobRunner, LockData, LockRepo, Schedule};
-use jobs::{error::Error, job::Job, job::JobRepo, lock::LockRepo, manager::JobManager};
+use jobs::{error::Error, job::JobAction, job::JobRepo, lock::LockRepo, manager::JobManager};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::ops::Add;
@@ -60,7 +60,7 @@ struct Project {
 }
 
 #[async_trait]
-impl Job for JobImplementer {
+impl JobAction for JobImplementer {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
         todo!()
     }

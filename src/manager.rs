@@ -1,5 +1,7 @@
-use crate::job::{Job, JobRepo};
+use crate::executor::Executor;
+use crate::job::{JobAction, JobName, JobRepo};
 use crate::lock::LockRepo;
+use std::collections::HashMap;
 
 pub struct JobManager<J, L>
 where
@@ -8,6 +10,7 @@ where
 {
     job_repo: J,
     lock_repo: L,
+    executors: HashMap<JobName, Executor>,
 }
 
 impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobManager<J, L> {
@@ -15,10 +18,11 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
         JobManager {
             job_repo,
             lock_repo,
+            executors: HashMap::new(),
         }
     }
 
-    pub fn register(self, name: String, job: impl Job) -> Self {
+    pub fn register(self, name: String, job: impl JobAction) -> Self {
         self
     }
 }

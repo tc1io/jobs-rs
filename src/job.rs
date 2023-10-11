@@ -1,9 +1,27 @@
 use crate::error::Error;
 use async_trait::async_trait;
+// use derive_more::{Display, From, Into};
+use std::sync::Arc;
 
 #[async_trait]
-pub trait Job {
+pub trait JobAction {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
+}
+
+// #[derive(Default, Clone, Into)]
+pub struct JobName(String);
+pub struct Job {
+    name: JobName,
+    action: Arc<dyn JobAction>,
+}
+
+impl Job {
+    // fn new() -> Self {
+    //     Job {
+    //         name: JobName::default(),
+    //         action: Arc::new(()),
+    //     }
+    // }
 }
 
 #[async_trait]
