@@ -1,4 +1,4 @@
-use crate::job::{JobAction, JobRepo};
+use crate::job::{Job, JobRepo};
 use crate::lock::LockRepo;
 
 pub struct JobManager<J, L>
@@ -18,7 +18,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
         }
     }
 
-    pub fn register(self, job_action: impl JobAction) -> Self {
+    pub fn register(self, name: String, job: impl Job) -> Self {
         self
     }
 }

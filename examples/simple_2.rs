@@ -2,10 +2,9 @@ use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use futures::FutureExt;
 // use jobs::{JobError, JobInfo, JobManager, JobRepo, JobRunner, LockData, LockRepo, Schedule};
-use jobs::{job::JobRepo, lock::LockRepo, manager::JobManager};
+use jobs::{error::Error, job::Job, job::JobRepo, lock::LockRepo, manager::JobManager};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
-use std::fmt::Error;
 use std::ops::Add;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -30,7 +29,12 @@ async fn main() {
         db: Arc::new(RwLock::new(lock_client)),
     };
 
+    let job1 = JobImplementer {
+        // name: "".to_string(),
+    };
+
     let mut manager = JobManager::<DbRepo, DbRepo>::new(db_repo, lock_repo);
+    manager.register(String::from("project-updater"), job1);
 }
 
 #[derive(Clone)]
@@ -42,8 +46,8 @@ pub struct DbRepo {
 impl LockRepo for DbRepo {}
 #[async_trait]
 impl JobRepo for DbRepo {}
-struct FooJob {
-    name: String,
+struct JobImplementer {
+    // name: String,
     // db: PickleDb,
     // project: Project,
 }
@@ -53,4 +57,11 @@ struct Project {
     id: i32,
     lifecycle_state: String,
     updated: String,
+}
+
+#[async_trait]
+impl Job for JobImplementer {
+    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
+        todo!()
+    }
 }

@@ -13,6 +13,7 @@ use std::time::{Duration as Dur, UNIX_EPOCH};
 use std::{fmt, format, println};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
+pub mod error;
 pub mod job;
 pub mod lock;
 pub mod manager;
