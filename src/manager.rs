@@ -3,6 +3,7 @@ use crate::executor::Executor;
 use crate::job::{JobAction, JobName, JobRepo};
 use crate::lock::LockRepo;
 use std::collections::HashMap;
+use tokio::task::JoinSet;
 
 pub struct JobManager<J, L>
 where
@@ -38,7 +39,8 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
             items.push(v.run())
         }
         for mut item in items {
-            item.await?;
+            // item.await?;
+            tokio::join!(item);
             // item.job.action.lock().await.call(Vec::new()).await?;
         }
         Ok(())
