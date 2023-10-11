@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait JobAction {
-    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
+    async fn call(&mut self, name: String, state: Vec<u8>) -> Result<Vec<u8>, Error>;
 }
 
 #[derive(Default, Clone, From, Into, Eq, Hash, PartialEq, Debug)]
@@ -19,9 +19,9 @@ pub struct Job {
 }
 
 impl Job {
-    pub fn new_with_action(action: impl JobAction + 'static) -> Self {
+    pub fn new_with_action(name: String, action: impl JobAction + 'static) -> Self {
         Job {
-            name: JobName::default(),
+            name: name.into(),
             state: Vec::new(),
             action: Arc::new(Mutex::new(action)),
         }

@@ -14,18 +14,25 @@ where
 }
 
 impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Executor<J, L> {
-    pub fn new(job_repo: J, lock_repo: L, job_action: impl JobAction + 'static) -> Self {
+    pub fn new(
+        name: String,
+        job_repo: J,
+        lock_repo: L,
+        job_action: impl JobAction + 'static,
+    ) -> Self {
         Executor {
             job_repo,
             lock_repo,
-            job: Job::new_with_action(job_action),
+            job: Job::new_with_action(name, job_action),
         }
     }
     pub async fn run(&mut self) -> Result<(), Error> {
         dbg!("inside run");
         let mut action = self.job.action.lock().await;
         // other logic will be added
-        let _xx = action.call(Vec::new()).await?;
+        let _xx = action
+            .call(self.job.name.clone().into(), Vec::new())
+            .await?;
         Ok(())
     }
 }

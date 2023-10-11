@@ -25,8 +25,13 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
     }
     pub fn register(&mut self, name: String, job: impl JobAction + 'static) {
         self.executors.insert(
-            name.into(),
-            Executor::new(self.job_repo.clone(), self.lock_repo.clone(), job),
+            name.clone().into(),
+            Executor::new(
+                name.into(),
+                self.job_repo.clone(),
+                self.lock_repo.clone(),
+                job,
+            ),
         );
     }
     pub async fn start(&mut self) -> Result<(), Error> {

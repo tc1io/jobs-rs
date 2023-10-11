@@ -32,9 +32,13 @@ async fn main() {
     let job1 = JobImplementer {
         // name: "".to_string(),
     };
+    let job2 = JobImplementer {
+        // name: "".to_string(),
+    };
 
     let mut manager = JobManager::<DbRepo, DbRepo>::new(db_repo, lock_repo);
     manager.register(String::from("project-updater"), job1);
+    manager.register(String::from("project-puller"), job2);
     let _ = manager.start().await.unwrap();
 }
 
@@ -52,6 +56,7 @@ struct JobImplementer {
     // db: PickleDb,
     // project: Project,
 }
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct Project {
     name: String,
@@ -62,8 +67,10 @@ struct Project {
 
 #[async_trait]
 impl JobAction for JobImplementer {
-    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
+    async fn call(&mut self, name: String, state: Vec<u8>) -> Result<Vec<u8>, Error> {
         dbg!("call");
-        todo!()
+        dbg!(name);
+        let state = Vec::new();
+        Ok(state)
     }
 }
