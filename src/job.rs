@@ -14,6 +14,7 @@ pub struct JobName(String);
 #[derive(Clone)]
 pub struct Job {
     pub name: JobName,
+    pub state: Vec<u8>,
     pub action: Arc<Mutex<dyn JobAction>>,
 }
 
@@ -21,6 +22,7 @@ impl Job {
     pub fn new_with_action(action: impl JobAction + 'static) -> Self {
         Job {
             name: JobName::default(),
+            state: Vec::new(),
             action: Arc::new(Mutex::new(action)),
         }
     }

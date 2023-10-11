@@ -30,15 +30,16 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
     }
     pub async fn start(&mut self) -> Result<(), Error> {
         dbg!("1");
-        let mut items = Vec::new();
-        let executors: Vec<(JobName, Executor<J, L>)> =
+        let mut executors: Vec<(JobName, Executor<J, L>)> =
             self.executors.clone().into_iter().collect();
-        for (k, v) in executors {
+        let mut items = Vec::new();
+        for (k, v) in executors.as_mut_slice() {
             dbg!(k);
-            items.push(v)
+            items.push(v.run())
         }
         for mut item in items {
-            item.job.action.lock().await.call(Vec::new()).await?;
+            item.await?;
+            // item.job.action.lock().await.call(Vec::new()).await?;
         }
         Ok(())
     }

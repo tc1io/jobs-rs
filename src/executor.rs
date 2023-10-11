@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::job::{Job, JobAction, JobRepo};
 use crate::lock::LockRepo;
 
@@ -19,5 +20,9 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
             lock_repo,
             job: Job::new_with_action(job_action),
         }
+    }
+    pub async fn run(&mut self) -> Result<(), Error> {
+        dbg!("inside run");
+        Ok(())
     }
 }
