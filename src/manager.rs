@@ -1,4 +1,5 @@
-use crate::{JobRepo, LockRepo};
+use crate::job::{JobAction, JobRepo};
+use crate::lock::LockRepo;
 
 pub struct JobManager<J, L>
 where
@@ -15,5 +16,9 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
             job_repo,
             lock_repo,
         }
+    }
+
+    pub fn register(self, job_action: impl JobAction) -> Self {
+        self
     }
 }

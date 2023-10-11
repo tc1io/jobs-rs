@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 
+pub trait JobAction {}
+
 #[async_trait]
 pub trait JobRepo {
     // async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError>;

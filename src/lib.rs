@@ -13,7 +13,8 @@ use std::time::{Duration as Dur, UNIX_EPOCH};
 use std::{fmt, format, println};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
-mod job;
+pub mod job;
+pub mod lock;
 pub mod manager;
 
 // #[derive(Debug)]
@@ -165,18 +166,18 @@ pub mod manager;
 //     pub version: i8,
 // }
 //
-#[async_trait]
-pub trait JobRepo {
-    // async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError>;
-    // async fn get_job(&mut self, name: &str) -> Result<Option<JobInfo>, JobError>;
-    // async fn save_state(&mut self, name: &str, state: Vec<u8>) -> Result<bool, JobError>;
-}
+// #[async_trait]
+// pub trait JobRepo {
+//     // async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError>;
+//     // async fn get_job(&mut self, name: &str) -> Result<Option<JobInfo>, JobError>;
+//     // async fn save_state(&mut self, name: &str, state: Vec<u8>) -> Result<bool, JobError>;
+// }
 //
-#[async_trait]
-pub trait LockRepo {
-    // async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
-    // async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
-}
+// #[async_trait]
+// pub trait LockRepo {
+//     // async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+//     // async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+// }
 //
 // impl<J: JobsRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobManager<J, L> {
 //     pub fn new(job_repo: J, lock_repo: L) -> Self {

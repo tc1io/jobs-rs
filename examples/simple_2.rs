@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use futures::FutureExt;
 // use jobs::{JobError, JobInfo, JobManager, JobRepo, JobRunner, LockData, LockRepo, Schedule};
-use jobs::{manager, JobRepo, LockRepo};
+use jobs::{job::JobRepo, lock::LockRepo, manager::JobManager};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::fmt::Error;
@@ -30,7 +30,7 @@ async fn main() {
         db: Arc::new(RwLock::new(lock_client)),
     };
 
-    let mut manager = manager::JobManager::<DbRepo, DbRepo>::new(db_repo, lock_repo);
+    let mut manager = JobManager::<DbRepo, DbRepo>::new(db_repo, lock_repo);
 }
 
 #[derive(Clone)]
