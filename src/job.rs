@@ -1,6 +1,6 @@
 use crate::error::Error;
 use async_trait::async_trait;
-// use derive_more::{Display, From, Into};
+use derive_more::{Display, From, Into};
 use std::sync::Arc;
 
 #[async_trait]
@@ -8,7 +8,7 @@ pub trait JobAction {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
 }
 
-// #[derive(Default, Clone, Into)]
+#[derive(Default, Clone, From, Into, Eq, Hash, PartialEq)]
 pub struct JobName(String);
 pub struct Job {
     name: JobName,
@@ -16,12 +16,12 @@ pub struct Job {
 }
 
 impl Job {
-    // fn new() -> Self {
-    //     Job {
-    //         name: JobName::default(),
-    //         action: Arc::new(()),
-    //     }
-    // }
+    pub fn new_with_action(action: impl JobAction + 'static) -> Self {
+        Job {
+            name: JobName::default(),
+            action: Arc::new(action),
+        }
+    }
 }
 
 #[async_trait]

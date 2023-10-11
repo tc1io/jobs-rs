@@ -5,12 +5,12 @@ use std::collections::HashMap;
 
 pub struct JobManager<J, L>
 where
-    J: JobRepo,
-    L: LockRepo,
+    J: JobRepo + Sync + Send + Clone,
+    L: LockRepo + Sync + Send + Clone,
 {
     job_repo: J,
     lock_repo: L,
-    executors: HashMap<JobName, Executor>,
+    executors: HashMap<JobName, Executor<J, L>>,
 }
 
 impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobManager<J, L> {
@@ -21,8 +21,10 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
             executors: HashMap::new(),
         }
     }
-
-    pub fn register(self, name: String, job: impl JobAction) -> Self {
-        self
+    pub fn register(&mut self, name: String, job: impl JobAction + 'static) {
+        self.executors.insert(
+            name.into(),
+            Executor::new(self.job_repo.clone(), self.lock_repo.clone(), job),
+        );
     }
 }
