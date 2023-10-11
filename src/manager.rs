@@ -23,14 +23,14 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
             executors: HashMap::new(),
         }
     }
-    pub fn register(&mut self, name: String, job: impl JobAction + 'static) {
+    pub fn register(&mut self, name: String, job_action: impl JobAction + 'static) {
         self.executors.insert(
             name.clone().into(),
             Executor::new(
                 name.into(),
                 self.job_repo.clone(),
                 self.lock_repo.clone(),
-                job,
+                job_action,
             ),
         );
     }
