@@ -35,6 +35,7 @@ async fn main() {
 
     let mut manager = JobManager::<DbRepo, DbRepo>::new(db_repo, lock_repo);
     manager.register(String::from("project-updater"), job1);
+    let _ = manager.start().await.unwrap();
 }
 
 #[derive(Clone)]
@@ -62,6 +63,7 @@ struct Project {
 #[async_trait]
 impl JobAction for JobImplementer {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error> {
+        dbg!("call");
         todo!()
     }
 }

@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::executor::Executor;
 use crate::job::{JobAction, JobName, JobRepo};
 use crate::lock::LockRepo;
@@ -26,5 +27,19 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
             name.into(),
             Executor::new(self.job_repo.clone(), self.lock_repo.clone(), job),
         );
+    }
+    pub async fn start(&mut self) -> Result<(), Error> {
+        dbg!("1");
+        let mut items = Vec::new();
+        let executors: Vec<(JobName, Executor<J, L>)> =
+            self.executors.clone().into_iter().collect();
+        for (k, v) in executors {
+            dbg!(k);
+            items.push(v)
+        }
+        for mut item in items {
+            item.job.action.lock().await.call(Vec::new()).await?;
+        }
+        Ok(())
     }
 }

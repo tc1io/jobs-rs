@@ -2,24 +2,26 @@ use crate::error::Error;
 use async_trait::async_trait;
 use derive_more::{Display, From, Into};
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait JobAction {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>, Error>;
 }
 
-#[derive(Default, Clone, From, Into, Eq, Hash, PartialEq)]
+#[derive(Default, Clone, From, Into, Eq, Hash, PartialEq, Debug)]
 pub struct JobName(String);
+#[derive(Clone)]
 pub struct Job {
-    name: JobName,
-    action: Arc<dyn JobAction>,
+    pub name: JobName,
+    pub action: Arc<Mutex<dyn JobAction>>,
 }
 
 impl Job {
     pub fn new_with_action(action: impl JobAction + 'static) -> Self {
         Job {
             name: JobName::default(),
-            action: Arc::new(action),
+            action: Arc::new(Mutex::new(action)),
         }
     }
 }

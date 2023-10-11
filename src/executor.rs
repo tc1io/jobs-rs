@@ -1,6 +1,7 @@
 use crate::job::{Job, JobAction, JobRepo};
 use crate::lock::LockRepo;
 
+#[derive(Clone)]
 pub struct Executor<J, L>
 where
     J: JobRepo + Sync + Send + Clone,
@@ -8,7 +9,7 @@ where
 {
     job_repo: J,
     lock_repo: L,
-    job: Job,
+    pub job: Job,
 }
 
 impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Executor<J, L> {
