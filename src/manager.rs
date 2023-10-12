@@ -23,7 +23,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
             executors: HashMap::new(),
         }
     }
-    pub fn register(&mut self, name: String, job_action: impl JobAction + 'static) {
+    pub fn register(&mut self, name: String, job_action: impl JobAction + Send + Sync + 'static) {
         self.executors.insert(
             name.clone().into(),
             Executor::new(
@@ -38,15 +38,8 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
         dbg!("1");
         let mut executors: Vec<(JobName, Executor<J, L>)> =
             self.executors.clone().into_iter().collect();
-        let mut items = Vec::new();
-        for (k, v) in executors.as_mut_slice() {
-            dbg!(k);
-            items.push(v.run())
-        }
-        for mut item in items {
-            // item.await?;
-            tokio::join!(item);
-            // item.job.action.lock().await.call(Vec::new()).await?;
+        for (_k, mut v) in executors {
+            tokio::join!(v.run());
         }
         Ok(())
     }
