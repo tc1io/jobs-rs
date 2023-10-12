@@ -1,10 +1,19 @@
+// use async_trait::async_trait;
+// use chrono::{DateTime, TimeZone, Utc};
+// use cron::Schedule as CronSchedule;
+// use futures::TryFutureExt;
 // use serde::{Deserialize, Serialize};
-pub mod error;
-pub mod executor;
-pub mod job;
-pub mod lock;
-pub mod manager;
-
+// use std::collections::HashMap;
+// use std::fmt::{Error, Formatter};
+// use std::future::Future;
+// use std::ops::Add;
+// use std::str::FromStr;
+// use std::sync::{Arc, RwLock};
+// use std::time::{Duration as Dur, UNIX_EPOCH};
+// use std::{fmt, format, println};
+// use tokio::sync::Mutex;
+// use tokio::time::{sleep, Duration};
+// mod job;
 // #[derive(Debug)]
 // pub enum JobError {
 //     DatabaseError(String),
@@ -155,16 +164,16 @@ pub mod manager;
 // }
 //
 // #[async_trait]
-// pub trait JobRepo {
-//     // async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError>;
-//     // async fn get_job(&mut self, name: &str) -> Result<Option<JobInfo>, JobError>;
-//     // async fn save_state(&mut self, name: &str, state: Vec<u8>) -> Result<bool, JobError>;
+// pub trait JobsRepo {
+//     async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError>;
+//     async fn get_job(&mut self, name: &str) -> Result<Option<JobInfo>, JobError>;
+//     async fn save_state(&mut self, name: &str, state: Vec<u8>) -> Result<bool, JobError>;
 // }
 //
 // #[async_trait]
 // pub trait LockRepo {
-//     // async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
-//     // async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+//     async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+//     async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
 // }
 //
 // impl<J: JobsRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobManager<J, L> {
