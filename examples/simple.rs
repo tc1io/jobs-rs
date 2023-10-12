@@ -10,6 +10,14 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, sleep, Duration};
 
+use mongodb::{options::ClientOptions};
+use mongodb::{Client, Collection, Database, error::Result};
+
+
+// pub async fn connect_to_mongodb() -> Result<Client> {
+//     let client_options = ClientOptions::parse("mongodb://localhost:27017").await?;
+//     Client::with_options(client_options)
+// }
 #[tokio::main]
 async fn main() {
     let mut db = PickleDb::new(
@@ -60,12 +68,31 @@ async fn main() {
         db: project_db2,
     };
 
-    let mut manager = JobManager::<DbRepo, DbRepo>::new(repo, repo2);
+    let client = mongodb::Client::with_uri_str("mongodb://localhost:27017")
+        .await
+        .unwrap();
+    println!("db connection ....");
+    let db = client.database("xxx_db");
+    // let collection = db.collection("xxx_collection");
+    let mrepo = MongoRepo::new(client);
+
+    let mut manager = JobManager::<DbRepo, DbRepo>::new(mrepo, repo2);
     manager.register("dummy", schedule.clone(), foo_job).await;
     // manager.register("my-job2", schedule, foo_job2).await;
     // manager.run().await.unwrap();
     manager.start().await.unwrap();
 }
+
+pub struct MongoRepo {
+    client: mongodb::Client,
+}
+
+impl MongoRepo {
+    pub fn new(client: mongodb::Client) -> Self {
+        MongoRepo { client }
+    }
+}
+
 
 #[derive(Clone)]
 pub struct DbRepo {
@@ -168,16 +195,27 @@ impl LockRepo for DbRepo {
 }
 
 #[async_trait]
-impl JobsRepo for DbRepo {
+impl JobsRepo for MongoRepo {
     async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError> {
+        // println!("create_job");
+        // self.db
+        //     .write()
+        //     .await
+        //     // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+        //     .set(&job.name, &job)
+        //     .map(|_| Ok(true))
+        //     .map_err(|e| JobError::DatabaseError(e.to_string()))?
+
         println!("create_job");
-        self.db
-            .write()
+        self.client
+            .database("foo")
+            .collection::<JobInfo>("job")
+            .insert_one(&job, None)
             .await
-            // .map_err(|e| JobError::DatabaseError(e.to_string()))?
-            .set(&job.name, &job)
             .map(|_| Ok(true))
             .map_err(|e| JobError::DatabaseError(e.to_string()))?
+
+        // Ok(true)
     }
 
     async fn get_job(&mut self, name: &str) -> Result<Option<JobInfo>, JobError> {

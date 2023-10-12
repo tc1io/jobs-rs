@@ -176,8 +176,13 @@ pub trait LockRepo {
     async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
 }
 
+#[async_trait]
+pub trait MRepo {
+    async fn new(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
+}
 impl<J: JobsRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobManager<J, L> {
-    pub fn new(job_repo: J, lock_repo: L) -> Self {
+    pub fn new(job_repo: MongoRepo, lock_repo: L) -> Self {
         Self {
             job_repo,
             lock_repo,
