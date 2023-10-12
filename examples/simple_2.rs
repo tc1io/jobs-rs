@@ -1,6 +1,7 @@
+// use std::fmt::Error;
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use futures::FutureExt;
+use futures::{FutureExt, TryFutureExt};
 // use jobs::{JobError, JobInfo, JobManager, JobRepo, JobRunner, LockData, LockRepo, Schedule};
 use jobs::{error::Error, job::JobAction, job::JobRepo, lock::LockRepo, manager::JobManager};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
@@ -9,6 +10,7 @@ use std::ops::Add;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, sleep, Duration};
+use jobs::job::{Job, JobName};
 
 #[tokio::main]
 async fn main() {
@@ -50,7 +52,27 @@ pub struct DbRepo {
 #[async_trait]
 impl LockRepo for DbRepo {}
 #[async_trait]
-impl JobRepo for DbRepo {}
+impl JobRepo for DbRepo {
+    // async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError> {
+    //     println!("create_job");
+    //     self.db
+    //         .write()
+    //         .await
+    //         // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+    //         .set(&job.name, &job)
+    //         .map(|_| Ok(true))
+    //         .map_err(|e| JobError::DatabaseError(e.to_string()))?
+    // }
+
+    async fn get_job(&mut self, name: JobName) -> Result<Option<Job>, Error> {
+        Ok(self
+            .db
+            .write()
+            .await
+            .map_err(|e| Error::GeneralError { description: "".to_string() })?
+            .get::<Job>(name))
+    }
+}
 struct JobImplementer {
     // name: String,
     // db: PickleDb,

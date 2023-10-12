@@ -30,6 +30,14 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
         dbg!("inside run");
         let mut action = self.job.action.lock().await;
         // other logic will be added
+        let name = self.job.clone().name;
+        let ji = self
+            .job_repo
+            .get_job(name.clone())
+            .await?;
+        // if ji.clone().should_run_now().await.unwrap() {
+        //    println!("yes");
+        // }
         let _xx = action
             .call(self.job.name.clone().into(), Vec::new())
             .await?;
