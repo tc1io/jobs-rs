@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::job::{Job, JobAction, JobRepo};
+use crate::job::{Job, JobAction, JobName, JobRepo};
 use crate::lock::LockRepo;
 
 #[derive(Clone)]
@@ -15,7 +15,7 @@ where
 
 impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Executor<J, L> {
     pub fn new(
-        name: String,
+        name: JobName,
         job_repo: J,
         lock_repo: L,
         job_action: impl JobAction + Send + Sync + 'static,

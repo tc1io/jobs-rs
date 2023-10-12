@@ -2,6 +2,7 @@ use crate::error::Error;
 use async_trait::async_trait;
 use derive_more::{Display, From, Into};
 use std::sync::Arc;
+use tokio::sync::oneshot::Sender;
 use tokio::sync::Mutex;
 
 #[async_trait]
@@ -19,12 +20,53 @@ pub struct Job {
 }
 
 impl Job {
-    pub fn new_with_action(name: String, action: impl JobAction + Send + Sync + 'static) -> Self {
+    pub fn new_with_action(name: JobName, action: impl JobAction + Send + Sync + 'static) -> Self {
         Job {
-            name: name.into(),
+            name,
             state: Vec::new(),
             action: Arc::new(Mutex::new(action)),
         }
+    }
+}
+pub enum Status {
+    Registered,
+    Suspended,
+    Running(Sender<()>),
+    Errored,
+    Cancelled,
+}
+
+pub struct Config {
+    name: JobName,
+}
+
+pub struct Entry {
+    pub name: JobName,
+    config: Config,
+    action: Arc<Mutex<dyn JobAction + Send + Sync>>,
+    status: Status,
+    state: Vec<u8>,
+}
+
+impl Entry {
+    pub fn new(name: JobName, action: impl JobAction + Send + Sync + 'static) -> Self {
+        Entry {
+            name: name.clone(),
+            config: Config { name },
+            action: Arc::new(Mutex::new(action)),
+            status: Status::Registered,
+            state: Vec::new(),
+        }
+    }
+    pub fn set_status_running(&mut self, tx: Sender<()>) {
+        self.status = Status::Running(tx);
+    }
+    pub async fn run(&mut self) -> Result<(), Error> {
+        dbg!("inside run");
+        let mut action = self.action.lock().await;
+        // other logic will be added
+        let _xx = action.call(self.name.clone().into(), Vec::new()).await?;
+        Ok(())
     }
 }
 
