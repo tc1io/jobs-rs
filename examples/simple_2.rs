@@ -41,10 +41,10 @@ async fn main() {
 
     let mut manager =
         JobManager::<DbRepo, DbRepo>::new(db_repo, lock_repo, String::from("project-puller"), job3);
-    manager.register(String::from("project-updater"), job1);
-    manager.register(String::from("project-puller"), job2);
+    manager.register2(String::from("project-updater"), job1);
+    manager.register2(String::from("project-puller"), job2);
     let _ = manager
-        .start_all(String::from("project-updater"))
+        .start(String::from("project-updater"))
         .await
         .unwrap();
 }

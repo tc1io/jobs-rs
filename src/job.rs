@@ -28,18 +28,21 @@ impl Job {
         }
     }
 }
+#[derive(Clone)]
 pub enum Status {
     Registered,
     Suspended,
-    Running(Sender<()>),
+    // Running(Sender<()>),
     Errored,
     Cancelled,
 }
 
+#[derive(Default, Clone)]
 pub struct Config {
     name: JobName,
 }
 
+#[derive(Clone)]
 pub struct Entry {
     pub name: JobName,
     config: Config,
@@ -58,11 +61,11 @@ impl Entry {
             state: Vec::new(),
         }
     }
-    pub fn set_status_running(&mut self, tx: Sender<()>) {
-        self.status = Status::Running(tx);
-    }
+    // pub fn set_status_running(&mut self, tx: Sender<()>) {
+    //     self.status = Status::Running(tx);
+    // }
     pub async fn run(&mut self) -> Result<(), Error> {
-        dbg!("inside run");
+        // dbg!("inside run");
         let mut action = self.action.lock().await;
         // other logic will be added
         let _xx = action.call(self.name.clone().into(), Vec::new()).await?;

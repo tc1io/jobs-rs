@@ -70,9 +70,6 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
     pub async fn start_all(&mut self, name: String) -> Result<(), Error> {
         dbg!("1");
         loop {
-            // let mut exec = self.exec.clone();
-            // tokio::spawn(async move { exec.run().await });
-            // ---- works
             let mut executors: Vec<(JobName, Executor<J, L>)> =
                 self.executors.clone().into_iter().collect();
             for (k, mut v) in executors {
@@ -91,107 +88,26 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
                 });
             }
         }
-
-        // let execs: Vec<(JobName, Executor<J, L>)> = self
-        //     .executors
-        //     .clone()
-        //     .into_iter()
-        //     .filter(|(n, _)| n == JobName::from(name))
-        //     .collect();
-        // let mut items = Vec::new();
-        // for (k, mut v) in self.executors.clone() {
-        //     items.push(v.run())
-        // }
-
-        // let n: JobName = name.into();
-        // let exec: Vec<Executor<J, L>> = self
-        //     .execs
-        //     .clone()
-        //     .into_iter()
-        //     .filter(|e| e.job.name == name.clone().into())
-        //     .collect();
-        //
-        // let mut ex: &Executor<J, L> = exec.get(1).ok_or(Error::GeneralError {
-        //     description: String::from("not found"),
-        // })?;
-        // ex.run().await.unwrap();
-
-        // let mut executors: Vec<(JobName, Executor<J, L>)> = self
-        //     .executors
-        //     .clone()
-        //     .into_iter()
-        //     .filter(|(j, _)| j == n)
-        //     .collect();
-        // dbg!(executors);
-        // for (_k, mut v) in self.executors.into_iter().collect() {
-        //     let (tx, rx) = oneshot::channel();
-        // tokio::spawn(
-        // let ex = Executor::new(
-        //         "".into(),
-        //         self.job_repo.clone(),
-        //         self.lock_repo.clone(),
-        //         job_action,
-        // );
-        //     ex.run(rx)
-        //
-        //     rx
-
-        // );
-
-        // self.executors.insert(String::from("").into(), tx)
-        // }
-        Ok(())
     }
     pub async fn start(&mut self, name: String) -> Result<(), Error> {
-        let (tx, rx) = oneshot::channel::<()>();
-        // let n: JobName = name.into();
-
-        //     let x: Vec<Entry> = self.jobs.clone().into_iter().collect();
-        //     // .iter()
-        //     // .filter(|e| e.name == JobName::from(name.clone()))
-        //     for mut yy in x {
-        //         {
-        //             let mut ex = yy.get_exec(self.job_repo.clone(), self.lock_repo.clone());
-        //             // if x.name !=  {
-        //             //     return Ok(());
-        //             // }
-        //             let xx = tokio::task::spawn(async move {
-        //                 let (tx, rx) = oneshot::channel();
-        //                 // dbg!("2");
-        //                 tokio::task::spawn(async move {
-        //                     ex.run();
-        //                     tx.send("done");
-        //                 });
-        //                 rx.await
-        //                     .map_err(|e| Error::GeneralError {
-        //                         description: String::from("not done"),
-        //                     })
-        //                     .unwrap();
-        //             });
-        //         }
-        //     }
-        //     // let ex = Executor::new(name.into(), self.clone().job_repo, self.clone().lock_repo, xx.)
-        //
-        //     // let xx = self.jobs.entry(name.into()).and_modify(|e| e.start(tx));
-        //
-        //     // dbg!(xx);
-        //     // .and_modify(|e| e.set_status_running(tx))
-        //     // .key();
-        //     // let yy = self.jobs.get(xx);
-        //     // match yy {
-        //     //     Some(mut v) => {
-        //     //         v.run().await?;
-        //     //         // tokio::spawn(async { vv.await });
-        //     //         rx.await.map_err(|e| Error::GeneralError {
-        //     //             description: e.to_string(),
-        //     //         })?;
-        //     //         Ok(())
-        //     //     }
-        //     //     None => Err(Error::GeneralError {
-        //     //         description: String::from("not found"),
-        //     //     }),
-        //     // }?;
-        //     //
-        Ok(())
+        loop {
+            let jobs: Vec<Entry> = self.jobs.clone().into_iter().collect();
+            for mut x in jobs {
+                tokio::task::spawn(async {
+                    let (tx, rx) = oneshot::channel();
+                    // dbg!(x.name);
+                    tokio::task::spawn(async move {
+                        x.run().await;
+                        tx.send("done");
+                    });
+                    rx.await
+                        .map_err(|e| Error::GeneralError {
+                            description: String::from("not done"),
+                        })
+                        .unwrap();
+                    // let n: JobName = name.into();
+                });
+            }
+        }
     }
 }
