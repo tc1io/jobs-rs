@@ -66,17 +66,14 @@ impl JobRepo for DbRepo {
     }
 
     async fn get_job(&mut self, name: JobName) -> Result<Option<Job>, Error> {
-        //     let name = name.clone();
-        //     Ok(self
-        //         .db
-        //         .write()
-        //         .await
-        //         // .map_err(|e| Error::GeneralError { description: "".to_string() })?
-        //         .get::<Job>((&name).into()))
-        // }
-        Ok(None)
+        Ok(self
+            .db
+            .write()
+            .await
+            // .map_err(|e| Error::GeneralError { description: "".to_string() })?
+            .get::<Job>((&name).into()))
+        }
     }
-}
 struct JobImplementer {
     // name: String,
     // db: PickleDb,

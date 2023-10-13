@@ -10,7 +10,7 @@ pub trait JobAction {
     async fn call(&mut self, name: String, state: Vec<u8>) -> Result<Vec<u8>, Error>;
 }
 
-#[derive(Default, Clone, Into, Eq, Hash, PartialEq, Debug, Serialize)]
+#[derive(Default, Clone, Into, Eq, Hash, PartialEq, Debug, Serialize, Deserialize)]
 pub struct JobName {
     name: String,
 }
@@ -31,7 +31,7 @@ impl<'a> Into<&'a str> for &'a JobName {
 
 
 
-#[derive(Clone, Serialize, Debug)]
+#[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct Job {
     pub name: JobName,
     pub state: Vec<u8>,
