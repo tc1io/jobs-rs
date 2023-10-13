@@ -1,6 +1,7 @@
+// use std::fmt::Error;
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use futures::FutureExt;
+use futures::{FutureExt, TryFutureExt};
 // use jobs::{JobError, JobInfo, JobManager, JobRepo, JobRunner, LockData, LockRepo, Schedule};
 use jobs::{error::Error, job::JobAction, job::JobRepo, lock::LockRepo, manager::JobManager};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
@@ -9,6 +10,7 @@ use std::ops::Add;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, sleep, Duration};
+use jobs::job::{Job, JobName};
 
 #[tokio::main]
 async fn main() {
@@ -37,8 +39,8 @@ async fn main() {
     };
 
     let mut manager = JobManager::<DbRepo, DbRepo>::new(db_repo, lock_repo);
-    manager.register(String::from("project-updater"), job1);
-    manager.register(String::from("project-puller"), job2);
+    manager.register(String::from("project-updater"), job1).await;
+    manager.register(String::from("project-puller"), job2).await;
     let _ = manager.start().await.unwrap();
 }
 
@@ -50,7 +52,31 @@ pub struct DbRepo {
 #[async_trait]
 impl LockRepo for DbRepo {}
 #[async_trait]
-impl JobRepo for DbRepo {}
+impl JobRepo for DbRepo {
+    async fn create_job(&mut self, job: Job) -> Result<bool, Error> {
+        dbg!("2");
+        println!("create_job");
+        let name = (&job.name).into();
+        self.db
+            .write()
+            .await
+            .set(name, &job)
+            .map(|_| Ok(true))
+            .map_err(|e| Error::GeneralError { description: "job creation failed".to_string() })?
+    }
+
+    async fn get_job(&mut self, name: JobName) -> Result<Option<Job>, Error> {
+        //     let name = name.clone();
+        //     Ok(self
+        //         .db
+        //         .write()
+        //         .await
+        //         // .map_err(|e| Error::GeneralError { description: "".to_string() })?
+        //         .get::<Job>((&name).into()))
+        // }
+        Ok(None)
+    }
+}
 struct JobImplementer {
     // name: String,
     // db: PickleDb,
