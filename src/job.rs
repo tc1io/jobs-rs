@@ -28,11 +28,11 @@ pub struct JobName(String);
 //         }
 //     }
 // }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Status {
     Registered,
     Suspended,
-    // Running(Sender<()>),
+    Running,
     Errored,
     Cancelled,
 }

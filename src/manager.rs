@@ -1,5 +1,6 @@
 use crate::error::Error;
 use crate::executor::Executor;
+use crate::job::Status::{Registered, Running};
 use crate::job::{Job, JobAction, JobName, JobRepo};
 use crate::lock::LockRepo;
 use tokio::sync::oneshot;
@@ -30,23 +31,26 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
     }
     pub async fn start_all(&mut self) -> Result<(), Error> {
         loop {
-            let jobs: Vec<Job> = self.jobs.clone().into_iter().collect();
-            for mut job in jobs {
+            for job in self.jobs.as_mut_slice() {
+                job.status = Running;
                 let mut ex =
                     Executor::new(job.clone(), self.job_repo.clone(), self.lock_repo.clone());
-                tokio::task::spawn(async {
+                let xx = tokio::spawn(async {
                     let (tx, rx) = oneshot::channel();
                     tokio::task::spawn(async move {
                         ex.run().await;
                         tx.send("done");
                     });
-                    rx.await
-                        .map_err(|e| Error::GeneralError {
-                            description: String::from("not done"),
-                        })
-                        .unwrap();
+                    rx.await.map_err(|e| Error::GeneralError {
+                        description: String::from("not done"),
+                    })
                 });
             }
+            for jj in self.jobs.clone() {
+                dbg!(jj.status);
+            }
+            // break;
         }
+        Ok(())
     }
 }
