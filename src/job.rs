@@ -33,8 +33,8 @@ pub enum Status {
     Registered,
     Suspended,
     Running,
-    Errored,
-    Cancelled,
+    // Errored,
+    // Cancelled,
 }
 
 #[derive(Default, Clone)]

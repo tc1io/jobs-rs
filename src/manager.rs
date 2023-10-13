@@ -3,7 +3,6 @@ use crate::executor::Executor;
 use crate::job::Status::{Registered, Running};
 use crate::job::{Job, JobAction, JobName, JobRepo};
 use crate::lock::LockRepo;
-use tokio::sync::oneshot;
 use tokio_retry::Action;
 
 pub struct JobManager<J, L>
@@ -31,26 +30,20 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
     }
     pub async fn start_all(&mut self) -> Result<(), Error> {
         loop {
+            let mut tasks = Vec::with_capacity(self.jobs.len());
             for job in self.jobs.as_mut_slice() {
                 job.status = Running;
                 let mut ex =
                     Executor::new(job.clone(), self.job_repo.clone(), self.lock_repo.clone());
-                let xx = tokio::spawn(async {
-                    let (tx, rx) = oneshot::channel();
-                    tokio::task::spawn(async move {
-                        ex.run().await;
-                        tx.send("done");
-                    });
-                    rx.await.map_err(|e| Error::GeneralError {
-                        description: String::from("not done"),
-                    })
-                });
+                tasks.push(tokio::task::spawn(async move {
+                    ex.run().await;
+                }));
             }
-            for jj in self.jobs.clone() {
-                dbg!(jj.status);
-            }
-            // break;
+            // let mut outputs = Vec::with_capacity(tasks.len());
+            // for task in tasks {
+            //     outputs.push(task.await.unwrap());
+            // }
+            // println!("{:?}", outputs);
         }
-        Ok(())
     }
 }
