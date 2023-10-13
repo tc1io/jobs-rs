@@ -2,6 +2,7 @@ use std::sync::Arc;
 use crate::error::Error;
 use crate::job::{Job, JobAction, JobRepo};
 use crate::lock::LockRepo;
+use crate::job::Schedule;
 
 #[derive(Clone)]
 pub struct Executor<J, L>
@@ -39,6 +40,9 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                 name,
                 state: vec![],
                 // action: Arc::new(()),
+                schedule: Schedule { expr: "".to_string() },
+                enabled: false,
+                last_run: 0,
             })
             .await?;
         if ji {
@@ -51,13 +55,9 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
             .await? {
            None => {}
            Some(value) => {
-               println!("{:?}",value)
+               // Job::should_run_now(value).unwrap().expect("TODO: panic message")
            }
-       };
-        // if ji.clone().should_run_now().await.unwrap() {
-        //    println!("yes");
-        // }
-
+       }
         // let ji = self
         //     .job_repo
         //     .create_job(ji.clone())
