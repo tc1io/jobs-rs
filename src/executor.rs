@@ -27,7 +27,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
         }
     }
     pub async fn run(&mut self) -> Result<(), Error> {
-        dbg!("inside run");
+        // dbg!("inside run");
         let mut action = self.job.action.lock().await;
         // other logic will be added
         let _xx = action

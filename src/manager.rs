@@ -53,39 +53,41 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             ),
         );
     }
-    pub fn register2(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
-        self.jobs
-            .insert(name.clone().into(), Entry::new(name.into(), action));
-    }
-    pub fn register3(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
-        self.execs.push(Executor::new(
-            name.into(),
-            self.job_repo.clone(),
-            self.lock_repo.clone(),
-            action,
-        ));
-    }
+    // pub fn register2(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
+    //     self.jobs
+    //         .insert(name.clone().into(), Entry::new(name.into(), action));
+    // }
+    // pub fn register3(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
+    //     self.execs.push(Executor::new(
+    //         name.into(),
+    //         self.job_repo.clone(),
+    //         self.lock_repo.clone(),
+    //         action,
+    //     ));
+    // }
     pub async fn start_all(&mut self, name: String) -> Result<(), Error> {
         dbg!("1");
-        // let mut exec = self.exec.clone();
-        // tokio::spawn(async move { exec.run().await });
-        // ---- works
-        let mut executors: Vec<(JobName, Executor<J, L>)> =
-            self.executors.clone().into_iter().collect();
-        for (_k, mut v) in executors {
-            let (tx, rx) = tokio::sync::oneshot::channel();
-            dbg!("2");
-            tokio::task::spawn(async move {
-                v.run().await.unwrap();
-                tx.send("done");
-                // if let Err(e) = tx.send(true) {
-                //     println!("Error notifying done {:?}", e);
-                // }
-                // sleep(Duration::from_secs(10));
-            });
-            rx.await.map_err(|e| Error::GeneralError {
-                description: String::from("not done"),
-            })?;
+        loop {
+            // let mut exec = self.exec.clone();
+            // tokio::spawn(async move { exec.run().await });
+            // ---- works
+            let mut executors: Vec<(JobName, Executor<J, L>)> =
+                self.executors.clone().into_iter().collect();
+            for (k, mut v) in executors {
+                let xx = tokio::task::spawn(async {
+                    let (tx, rx) = oneshot::channel();
+                    // dbg!("2");
+                    tokio::task::spawn(async move {
+                        v.run().await.unwrap();
+                        tx.send("done");
+                    });
+                    rx.await
+                        .map_err(|e| Error::GeneralError {
+                            description: String::from("not done"),
+                        })
+                        .unwrap();
+                });
+            }
         }
 
         // let execs: Vec<(JobName, Executor<J, L>)> = self
@@ -138,34 +140,34 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         // }
         Ok(())
     }
-    pub async fn start(&mut self, name: String) -> Result<(), Error> {
-        let (tx, rx) = oneshot::channel::<()>();
-        // let n: JobName = name.into();
-
-        // let ex = Executor::new(name.into(), self.clone().job_repo, self.clone().lock_repo, xx.)
-
-        let xx = self
-            .jobs
-            .entry(name.into())
-            .and_modify(|e| e.set_status_running(tx));
-        // dbg!(xx);
-        // .and_modify(|e| e.set_status_running(tx))
-        // .key();
-        // let yy = self.jobs.get(xx);
-        // match yy {
-        //     Some(mut v) => {
-        //         v.run().await?;
-        //         // tokio::spawn(async { vv.await });
-        //         rx.await.map_err(|e| Error::GeneralError {
-        //             description: e.to_string(),
-        //         })?;
-        //         Ok(())
-        //     }
-        //     None => Err(Error::GeneralError {
-        //         description: String::from("not found"),
-        //     }),
-        // }?;
-        //
-        Ok(())
-    }
+    // pub async fn start(&mut self, name: String) -> Result<(), Error> {
+    //     let (tx, rx) = oneshot::channel::<()>();
+    //     // let n: JobName = name.into();
+    //
+    //     // let ex = Executor::new(name.into(), self.clone().job_repo, self.clone().lock_repo, xx.)
+    //
+    //     let xx = self
+    //         .jobs
+    //         .entry(name.into())
+    //         .and_modify(|e| e.set_status_running(tx));
+    //     // dbg!(xx);
+    //     // .and_modify(|e| e.set_status_running(tx))
+    //     // .key();
+    //     // let yy = self.jobs.get(xx);
+    //     // match yy {
+    //     //     Some(mut v) => {
+    //     //         v.run().await?;
+    //     //         // tokio::spawn(async { vv.await });
+    //     //         rx.await.map_err(|e| Error::GeneralError {
+    //     //             description: e.to_string(),
+    //     //         })?;
+    //     //         Ok(())
+    //     //     }
+    //     //     None => Err(Error::GeneralError {
+    //     //         description: String::from("not found"),
+    //     //     }),
+    //     // }?;
+    //     //
+    //     Ok(())
+    // }
 }
