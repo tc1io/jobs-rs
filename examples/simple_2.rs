@@ -39,8 +39,8 @@ async fn main() {
     };
 
     let mut manager = JobManager::<DbRepo, DbRepo>::new(db_repo, lock_repo);
-    manager.register(String::from("project-updater"), job1);
-    manager.register(String::from("project-puller"), job2);
+    manager.register(String::from("project-updater"), job1).await;
+    manager.register(String::from("project-puller"), job2).await;
     let _ = manager.start().await.unwrap();
 }
 
@@ -53,24 +53,28 @@ pub struct DbRepo {
 impl LockRepo for DbRepo {}
 #[async_trait]
 impl JobRepo for DbRepo {
-    // async fn create_job(&mut self, job: JobInfo) -> Result<bool, JobError> {
-    //     println!("create_job");
-    //     self.db
-    //         .write()
-    //         .await
-    //         // .map_err(|e| JobError::DatabaseError(e.to_string()))?
-    //         .set(&job.name, &job)
-    //         .map(|_| Ok(true))
-    //         .map_err(|e| JobError::DatabaseError(e.to_string()))?
-    // }
-
-    async fn get_job(&mut self, name: JobName) -> Result<Option<Job>, Error> {
-        Ok(self
-            .db
+    async fn create_job(&mut self, job: Job) -> Result<bool, Error> {
+        dbg!("2");
+        println!("create_job");
+        let name = (&job.name).into();
+        self.db
             .write()
             .await
-            .map_err(|e| Error::GeneralError { description: "".to_string() })?
-            .get::<Job>(name))
+            .set(name, &job)
+            .map(|_| Ok(true))
+            .map_err(|e| Error::GeneralError { description: "job creation failed".to_string() })?
+    }
+
+    async fn get_job(&mut self, name: JobName) -> Result<Option<Job>, Error> {
+        //     let name = name.clone();
+        //     Ok(self
+        //         .db
+        //         .write()
+        //         .await
+        //         // .map_err(|e| Error::GeneralError { description: "".to_string() })?
+        //         .get::<Job>((&name).into()))
+        // }
+        Ok(None)
     }
 }
 struct JobImplementer {

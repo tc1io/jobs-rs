@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::error::Error;
 use crate::job::{Job, JobAction, JobRepo};
 use crate::lock::LockRepo;
@@ -28,19 +29,41 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
     }
     pub async fn run(&mut self) -> Result<(), Error> {
         dbg!("inside run");
-        let mut action = self.job.action.lock().await;
+        // let mut action = self.job.action.lock().await;
         // other logic will be added
-        let name = self.job.clone().name;
+        let name = self.job.clone().name.clone();
+        let name1 = name.clone();
         let ji = self
             .job_repo
-            .get_job(name.clone())
+            .create_job(Job {
+                name,
+                state: vec![],
+                // action: Arc::new(()),
+            })
             .await?;
+        if ji {
+            println!("job created")
+        }
+
+       match self
+            .job_repo
+            .get_job(name1.clone())
+            .await? {
+           None => {}
+           Some(value) => {
+               println!("{:?}",value)
+           }
+       };
         // if ji.clone().should_run_now().await.unwrap() {
         //    println!("yes");
         // }
-        let _xx = action
-            .call(self.job.name.clone().into(), Vec::new())
-            .await?;
+
+        // let ji = self
+        //     .job_repo
+        //     .create_job(ji.clone())
+        //     .await?;
+
+        // let _r = self.job_repo.create_job(ji.clone()).await?;
         Ok(())
     }
 }
