@@ -73,6 +73,22 @@ impl JobRepo for DbRepo {
             // .map_err(|e| Error::GeneralError { description: "".to_string() })?
             .get::<Job>((&name).into()))
         }
+
+    async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool, Error> {
+        let mut job = self.get_job(name.clone()).await.unwrap().unwrap();
+        job.state = state;
+        // let name1 = name.clone()
+        job.last_run = Utc::now().timestamp_millis();
+        dbg!("{:?}", job.last_run);
+        self.db
+            .write()
+            .await
+            // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+            .set((&name).into(), &job)
+            .unwrap();
+        println!("state saved");
+        Ok(true)
+    }
     }
 struct JobImplementer {
     // name: String,
