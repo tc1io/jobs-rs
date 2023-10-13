@@ -12,22 +12,22 @@ pub trait JobAction {
 
 #[derive(Default, Clone, From, Into, Eq, Hash, PartialEq, Debug)]
 pub struct JobName(String);
-#[derive(Clone)]
-pub struct Job {
-    pub name: JobName,
-    pub state: Vec<u8>,
-    pub action: Arc<Mutex<dyn JobAction + Send + Sync>>,
-}
+// #[derive(Clone)]
+// pub struct Job {
+//     pub name: JobName,
+//     // pub state: Vec<u8>,
+//     pub action: Arc<Mutex<dyn JobAction + Send + Sync>>,
+// }
 
-impl Job {
-    pub fn new_with_action(name: JobName, action: impl JobAction + Send + Sync + 'static) -> Self {
-        Job {
-            name,
-            state: Vec::new(),
-            action: Arc::new(Mutex::new(action)),
-        }
-    }
-}
+// impl Job {
+//     pub fn new_with_action(name: JobName, action: impl JobAction + Send + Sync + 'static) -> Self {
+//         Job {
+//             name,
+//             // state: Vec::new(),
+//             action: Arc::new(Mutex::new(action)),
+//         }
+//     }
+// }
 #[derive(Clone)]
 pub enum Status {
     Registered,
@@ -43,34 +43,34 @@ pub struct Config {
 }
 
 #[derive(Clone)]
-pub struct Entry {
+pub struct Job {
     pub name: JobName,
-    config: Config,
-    action: Arc<Mutex<dyn JobAction + Send + Sync>>,
-    status: Status,
-    state: Vec<u8>,
+    pub action: Arc<Mutex<dyn JobAction + Send + Sync>>,
+    pub status: Status,
+    // state: Vec<u8>,
+    // config: Config,
 }
 
-impl Entry {
+impl Job {
     pub fn new(name: JobName, action: impl JobAction + Send + Sync + 'static) -> Self {
-        Entry {
+        Job {
             name: name.clone(),
-            config: Config { name },
             action: Arc::new(Mutex::new(action)),
             status: Status::Registered,
-            state: Vec::new(),
+            // config: Config { name },
+            // state: Vec::new(),
         }
     }
     // pub fn set_status_running(&mut self, tx: Sender<()>) {
     //     self.status = Status::Running(tx);
     // }
-    pub async fn run(&mut self) -> Result<(), Error> {
-        // dbg!("inside run");
-        let mut action = self.action.lock().await;
-        // other logic will be added
-        let _xx = action.call(self.name.clone().into(), Vec::new()).await?;
-        Ok(())
-    }
+    // pub async fn run(&mut self) -> Result<(), Error> {
+    //     // dbg!("inside run");
+    //     let mut action = self.action.lock().await;
+    //     // other logic will be added
+    //     let _xx = action.call(self.name.clone().into(), Vec::new()).await?;
+    //     Ok(())
+    // }
 }
 
 #[async_trait]

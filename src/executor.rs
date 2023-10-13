@@ -14,16 +14,11 @@ where
 }
 
 impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Executor<J, L> {
-    pub fn new(
-        name: JobName,
-        job_repo: J,
-        lock_repo: L,
-        job_action: impl JobAction + Send + Sync + 'static,
-    ) -> Self {
+    pub fn new(job: Job, job_repo: J, lock_repo: L) -> Self {
         Executor {
             job_repo,
             lock_repo,
-            job: Job::new_with_action(name, job_action),
+            job,
         }
     }
     pub async fn run(&mut self) -> Result<(), Error> {

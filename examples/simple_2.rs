@@ -43,10 +43,7 @@ async fn main() {
         JobManager::<DbRepo, DbRepo>::new(db_repo, lock_repo, String::from("project-puller"), job3);
     manager.register2(String::from("project-updater"), job1);
     manager.register2(String::from("project-puller"), job2);
-    let _ = manager
-        .start(String::from("project-updater"))
-        .await
-        .unwrap();
+    let _ = manager.start_all().await.unwrap();
 }
 
 #[derive(Clone)]
