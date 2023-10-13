@@ -2,7 +2,7 @@ use crate::error::Error;
 use crate::error::Error::GeneralError;
 use crate::executor::Executor;
 use crate::job;
-use crate::job::{Entry, JobAction, JobName, JobRepo};
+use crate::job::{Entry, Job, JobAction, JobName, JobRepo};
 use crate::lock::LockRepo;
 use std::collections::HashMap;
 use std::thread::sleep;
@@ -19,7 +19,8 @@ where
     job_repo: J,
     lock_repo: L,
     executors: HashMap<JobName, Executor<J, L>>,
-    jobs: HashMap<JobName, Entry>,
+    // jobs: HashMap<JobName, Entry>,
+    jobs: Vec<Entry>,
     execs: Vec<Executor<J, L>>,
     exec: Executor<J, L>,
 }
@@ -37,7 +38,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             job_repo: job_repo.clone(),
             lock_repo: lock_repo.clone(),
             executors: HashMap::new(),
-            jobs: HashMap::new(),
+            jobs: Vec::new(),
             execs: Vec::new(),
             exec: Executor::new(name.into(), job_repo.clone(), lock_repo.clone(), job_action),
         }
@@ -53,10 +54,11 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             ),
         );
     }
-    // pub fn register2(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
-    //     self.jobs
-    //         .insert(name.clone().into(), Entry::new(name.into(), action));
-    // }
+    pub fn register2(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
+        self.jobs.push(Entry::new(name.into(), action))
+        // self.jobs
+        //     .insert(name.clone().into(), Entry::new(name.into(), action));
+    }
     // pub fn register3(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
     //     self.execs.push(Executor::new(
     //         name.into(),
@@ -140,34 +142,56 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         // }
         Ok(())
     }
-    // pub async fn start(&mut self, name: String) -> Result<(), Error> {
-    //     let (tx, rx) = oneshot::channel::<()>();
-    //     // let n: JobName = name.into();
-    //
-    //     // let ex = Executor::new(name.into(), self.clone().job_repo, self.clone().lock_repo, xx.)
-    //
-    //     let xx = self
-    //         .jobs
-    //         .entry(name.into())
-    //         .and_modify(|e| e.set_status_running(tx));
-    //     // dbg!(xx);
-    //     // .and_modify(|e| e.set_status_running(tx))
-    //     // .key();
-    //     // let yy = self.jobs.get(xx);
-    //     // match yy {
-    //     //     Some(mut v) => {
-    //     //         v.run().await?;
-    //     //         // tokio::spawn(async { vv.await });
-    //     //         rx.await.map_err(|e| Error::GeneralError {
-    //     //             description: e.to_string(),
-    //     //         })?;
-    //     //         Ok(())
-    //     //     }
-    //     //     None => Err(Error::GeneralError {
-    //     //         description: String::from("not found"),
-    //     //     }),
-    //     // }?;
-    //     //
-    //     Ok(())
-    // }
+    pub async fn start(&mut self, name: String) -> Result<(), Error> {
+        let (tx, rx) = oneshot::channel::<()>();
+        // let n: JobName = name.into();
+
+        //     let x: Vec<Entry> = self.jobs.clone().into_iter().collect();
+        //     // .iter()
+        //     // .filter(|e| e.name == JobName::from(name.clone()))
+        //     for mut yy in x {
+        //         {
+        //             let mut ex = yy.get_exec(self.job_repo.clone(), self.lock_repo.clone());
+        //             // if x.name !=  {
+        //             //     return Ok(());
+        //             // }
+        //             let xx = tokio::task::spawn(async move {
+        //                 let (tx, rx) = oneshot::channel();
+        //                 // dbg!("2");
+        //                 tokio::task::spawn(async move {
+        //                     ex.run();
+        //                     tx.send("done");
+        //                 });
+        //                 rx.await
+        //                     .map_err(|e| Error::GeneralError {
+        //                         description: String::from("not done"),
+        //                     })
+        //                     .unwrap();
+        //             });
+        //         }
+        //     }
+        //     // let ex = Executor::new(name.into(), self.clone().job_repo, self.clone().lock_repo, xx.)
+        //
+        //     // let xx = self.jobs.entry(name.into()).and_modify(|e| e.start(tx));
+        //
+        //     // dbg!(xx);
+        //     // .and_modify(|e| e.set_status_running(tx))
+        //     // .key();
+        //     // let yy = self.jobs.get(xx);
+        //     // match yy {
+        //     //     Some(mut v) => {
+        //     //         v.run().await?;
+        //     //         // tokio::spawn(async { vv.await });
+        //     //         rx.await.map_err(|e| Error::GeneralError {
+        //     //             description: e.to_string(),
+        //     //         })?;
+        //     //         Ok(())
+        //     //     }
+        //     //     None => Err(Error::GeneralError {
+        //     //         description: String::from("not found"),
+        //     //     }),
+        //     // }?;
+        //     //
+        Ok(())
+    }
 }
