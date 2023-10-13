@@ -23,7 +23,8 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
             executors: HashMap::new(),
         }
     }
-    pub async fn register(&mut self, name: String, job_action: impl JobAction + 'static) {
+    pub async fn register(&mut self, name: String, job_action: impl JobAction + 'static + std::marker::Send + std::marker::Sync) {
+
         self.executors.insert(
             name.clone().into(),
             Executor::new(
@@ -38,6 +39,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
         dbg!("1");
         let mut executors: Vec<(JobName, Executor<J, L>)> =
             self.executors.clone().into_iter().collect();
+
         dbg!("11");
         let mut items = Vec::new();
         dbg!("22");

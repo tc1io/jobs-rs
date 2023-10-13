@@ -39,7 +39,7 @@ pub struct Job {
 }
 
 impl Job {
-    pub fn new_with_action(name: String, action: impl JobAction + 'static) -> Self {
+    pub fn new_with_action(name: String, action: impl JobAction + Send + Sync + 'static) -> Self {
         Job {
             name: name.into(),
             state: Vec::new(),

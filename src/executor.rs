@@ -19,7 +19,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
         name: String,
         job_repo: J,
         lock_repo: L,
-        job_action: impl JobAction + 'static,
+        job_action: impl JobAction + Send + Sync + 'static + std::marker::Send,
     ) -> Self {
         Executor {
             job_repo,
