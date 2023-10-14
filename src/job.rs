@@ -1,8 +1,10 @@
 use crate::error::Error;
+use crate::job::Status::{Registered, Suspended};
 use async_trait::async_trait;
 use derive_more::{Display, From, Into};
+use std::os::unix::prelude::ExitStatusExt;
 use std::sync::Arc;
-use tokio::sync::oneshot::Sender;
+use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 
 #[async_trait]
@@ -11,7 +13,8 @@ pub trait JobAction {
 }
 
 #[derive(Default, Clone, From, Into, Eq, Hash, PartialEq, Debug)]
-pub struct JobName(String);
+pub struct JobName(pub String);
+
 // #[derive(Clone)]
 // pub struct Job {
 //     pub name: JobName,
@@ -32,10 +35,20 @@ pub struct JobName(String);
 pub enum Status {
     Registered,
     Suspended,
-    Running,
+    Running(Sender<()>),
     // Errored,
     // Cancelled,
 }
+
+// impl Clone for Status {
+//     fn clone(&self) -> Self {
+//         match self {
+//             Registered => Registered,
+//             Suspended => Suspended,
+//             Status::Running(sender) => Status::Running(*sender),
+//         }
+//     }
+// }
 
 #[derive(Default, Clone)]
 pub struct Config {

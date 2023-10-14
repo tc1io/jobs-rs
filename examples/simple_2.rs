@@ -40,6 +40,9 @@ async fn main() {
     manager.register(String::from("project-updater"), job1);
     manager.register(String::from("project-puller"), job2);
     let _ = manager.start_all().await.unwrap();
+    dbg!("hheee");
+    manager.stop_by_name("project-updater".to_string()).await;
+    sleep(Duration::from_secs(5)).await;
 }
 
 #[derive(Clone)]
