@@ -7,7 +7,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::{mpsc, Mutex};
-use tokio::time::sleep;
 use tokio_retry::Action;
 
 pub struct JobManager<J, L>
@@ -55,7 +54,6 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
                     .iter_mut()
                     .filter(|j| j.get_registered_or_running())
                 {
-                    sleep(Duration::from_secs(2)).await;
                     job.status = Running(tx.clone());
                     let mut ex = Executor::new(job.clone(), job_repo.clone(), lock_repo.clone());
                     tokio::task::spawn(async move {

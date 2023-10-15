@@ -43,9 +43,7 @@ async fn main() {
     manager.register(String::from("project-puller"), job2).await;
     let _ = manager.start_all().await.unwrap();
     sleep(Duration::from_secs(6)).await;
-    dbg!("hheee");
     manager.stop_by_name("project-puller".to_string()).await;
-    sleep(Duration::from_secs(20)).await;
 }
 
 #[derive(Clone)]
@@ -74,9 +72,7 @@ struct Project {
 #[async_trait]
 impl JobAction for JobImplementer {
     async fn call(&mut self, name: String, state: Vec<u8>) -> Result<Vec<u8>, Error> {
-        dbg!("call");
         dbg!(name);
-        // sleep(Duration::from_secs(5)).await;
         let state = Vec::new();
         Ok(state)
     }
