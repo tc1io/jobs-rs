@@ -84,6 +84,14 @@ impl Job {
             _ => false,
         }
     }
+
+    pub fn registered_or_running(&self) -> bool {
+        match self.clone().status {
+            Registered => true,
+            Running(_s) => true,
+            _ => false,
+        }
+    }
     pub fn running(self, job_name: JobName) -> bool {
         match self.clone().status {
             Running(s) => true,

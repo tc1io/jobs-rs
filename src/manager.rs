@@ -45,7 +45,12 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         let l = self.lock_repo.clone();
         tokio::task::spawn(async move {
             loop {
-                for job in jobs.lock().await.iter_mut() {
+                for job in jobs
+                    .lock()
+                    .await
+                    .iter_mut()
+                    .filter(|j| j.registered_or_running())
+                {
                     sleep(Duration::from_secs(2)).await;
                     match rx.try_recv() {
                         Ok(n) => {
