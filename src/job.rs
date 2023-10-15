@@ -35,7 +35,7 @@ pub struct JobName(pub String);
 pub enum Status {
     Registered,
     Suspended,
-    Running(Sender<String>),
+    Running(Sender<JobName>),
     // Errored,
     // Cancelled,
 }
@@ -78,26 +78,38 @@ impl Job {
     //     jobs.iter().filter(|job| job.registered()).collect()
     // }
 
-    pub fn registered(self) -> bool {
-        match self.clone().status {
-            Running(s) => true,
-            _ => false,
-        }
-    }
-
-    pub fn registered_or_running(&self) -> bool {
+    // pub fn registered(self) -> bool {
+    //     match self.clone().status {
+    //         Running(s) => true,
+    //         _ => false,
+    //     }
+    // }
+    //
+    pub fn get_registered_or_running(&self) -> bool {
         match self.clone().status {
             Registered => true,
             Running(_s) => true,
             _ => false,
         }
     }
-    pub fn running(self, job_name: JobName) -> bool {
-        match self.clone().status {
-            Running(s) => true,
-            _ => false,
-        }
-    }
+
+    // pub async fn suspend_job_by_name(
+    //     jobs: Arc<Mutex<Vec<Job>>>,
+    //     name: JobName,
+    // ) -> Arc<Mutex<Vec<Job>>> {
+    //     let xx = jobs
+    //         .lock()
+    //         .await
+    //         .iter_mut()
+    //         .map(|job| job.status = Suspended)
+    //         .collect();
+    // }
+    // pub fn running(self, job_name: JobName) -> bool {
+    //     match self.clone().status {
+    //         Running(s) => true,
+    //         _ => false,
+    //     }
+    // }
     // pub fn set_status_running(&mut self, tx: Sender<()>) {
     //     self.status = Status::Running(tx);
     // }

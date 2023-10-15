@@ -44,7 +44,7 @@ async fn main() {
     let _ = manager.start_all().await.unwrap();
     sleep(Duration::from_secs(6)).await;
     dbg!("hheee");
-    manager.stop_by_name("project-updater".to_string()).await;
+    manager.stop_by_name("project-puller".to_string()).await;
     sleep(Duration::from_secs(20)).await;
 }
 
