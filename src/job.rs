@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::job::Status::{Registered, Suspended};
+use crate::job::Status::{Registered, Running, Suspended};
 use async_trait::async_trait;
 use derive_more::{Display, From, Into};
 use std::os::unix::prelude::ExitStatusExt;
@@ -35,7 +35,7 @@ pub struct JobName(pub String);
 pub enum Status {
     Registered,
     Suspended,
-    Running(Sender<()>),
+    Running(Sender<String>),
     // Errored,
     // Cancelled,
 }
@@ -72,6 +72,22 @@ impl Job {
             status: Status::Registered,
             // config: Config { name },
             // state: Vec::new(),
+        }
+    }
+    // pub fn get_registered_jobs(jobs: Vec<Job>) -> Vec<Job> {
+    //     jobs.iter().filter(|job| job.registered()).collect()
+    // }
+
+    pub fn registered(self) -> bool {
+        match self.clone().status {
+            Running(s) => true,
+            _ => false,
+        }
+    }
+    pub fn running(self, job_name: JobName) -> bool {
+        match self.clone().status {
+            Running(s) => true,
+            _ => false,
         }
     }
     // pub fn set_status_running(&mut self, tx: Sender<()>) {

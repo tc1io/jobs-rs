@@ -37,12 +37,15 @@ async fn main() {
     };
 
     let mut manager = JobManager::<DbRepo, DbRepo>::new(db_repo, lock_repo);
-    manager.register(String::from("project-updater"), job1);
-    manager.register(String::from("project-puller"), job2);
+    manager
+        .register(String::from("project-updater"), job1)
+        .await;
+    manager.register(String::from("project-puller"), job2).await;
     let _ = manager.start_all().await.unwrap();
+    sleep(Duration::from_secs(6)).await;
     dbg!("hheee");
     manager.stop_by_name("project-updater".to_string()).await;
-    sleep(Duration::from_secs(5)).await;
+    sleep(Duration::from_secs(20)).await;
 }
 
 #[derive(Clone)]
@@ -73,6 +76,7 @@ impl JobAction for JobImplementer {
     async fn call(&mut self, name: String, state: Vec<u8>) -> Result<Vec<u8>, Error> {
         dbg!("call");
         dbg!(name);
+        // sleep(Duration::from_secs(5)).await;
         let state = Vec::new();
         Ok(state)
     }
