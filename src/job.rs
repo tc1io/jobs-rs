@@ -2,10 +2,12 @@ use crate::error::Error;
 use crate::job::Status::{Registered, Running, Suspended};
 use async_trait::async_trait;
 use derive_more::{Display, From, Into};
+use std::collections::hash_map::Values;
 use std::os::unix::prelude::ExitStatusExt;
 use std::sync::Arc;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::oneshot::Sender;
 use tokio::sync::Mutex;
+// use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait JobAction {
@@ -31,7 +33,7 @@ pub struct JobName(pub String);
 //         }
 //     }
 // }
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Status {
     Registered,
     Suspended,
@@ -55,7 +57,7 @@ pub struct Config {
     name: JobName,
 }
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct Job {
     pub name: JobName,
     pub action: Arc<Mutex<dyn JobAction + Send + Sync>>,
@@ -74,6 +76,7 @@ impl Job {
             // state: Vec::new(),
         }
     }
+    // pub fn status()
     // pub fn get_registered_jobs(jobs: Vec<Job>) -> Vec<Job> {
     //     jobs.iter().filter(|job| job.registered()).collect()
     // }
@@ -85,8 +88,8 @@ impl Job {
     //     }
     // }
     //
-    pub fn get_registered_or_running(&self) -> bool {
-        match self.clone().status {
+    pub fn get_registered_or_running(s: &Status) -> bool {
+        match s {
             Registered => true,
             Running(_s) => true,
             _ => false,
@@ -121,6 +124,17 @@ impl Job {
     //     Ok(())
     // }
 }
+
+// impl From<&mut Job> for Job {
+//     fn from(value: &mut Job) -> Self {
+//         *value.into()
+//         // Job {
+//         //     name: value.name,
+//         //     status: value.status,
+//         //     action: value.action,
+//         // }
+//     }
+// }
 
 #[async_trait]
 pub trait JobRepo {

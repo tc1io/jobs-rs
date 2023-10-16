@@ -37,12 +37,12 @@ async fn main() {
     };
 
     let mut manager = JobManager::<DbRepo, DbRepo>::new(db_repo, lock_repo);
-    manager.register(String::from("project-updater"), job1);
-    manager.register(String::from("project-puller"), job2);
-    let _ = manager.start_all().await.unwrap();
-    // sleep(Duration::from_secs(4)).await;
-    manager.stop_by_name("project-puller".to_string()).await;
-    // sleep(Duration::from_secs(20)).await;
+    manager.register2(String::from("project-updater"), job1);
+    manager.register2(String::from("project-puller"), job2);
+    let _ = manager.start_all2().await.unwrap();
+    sleep(Duration::from_secs(4)).await;
+    manager.stop_by_name2("project-puller".to_string()).await;
+    sleep(Duration::from_secs(20)).await;
 }
 
 #[derive(Clone)]
