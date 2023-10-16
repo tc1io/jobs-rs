@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct Repo {
-    db: Arc<RwLock<PickleDb>>,
+    pub(crate) db: Arc<RwLock<PickleDb>>,
 }
 
 impl Repo {
@@ -56,3 +56,5 @@ impl JobRepo for Repo {
         Ok(true)
     }
 }
+
+
