@@ -1,14 +1,9 @@
 use crate::error::Error;
-use crate::error::Error::GeneralError;
 use crate::executor::Executor;
 use crate::job::Status::{Registered, Running, Suspended};
 use crate::job::{Job, JobAction, JobName, JobRepo, Status};
 use crate::lock::LockRepo;
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
-use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::time::sleep;
 use tokio_retry::Action;
@@ -20,8 +15,7 @@ where
 {
     job_repo: J,
     lock_repo: L,
-    // jobs: Arc<Mutex<Vec<Job>>>,
-    jobs2: Vec<Job>,
+    jobs: Vec<Job>,
 }
 
 impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sync + 'static>
@@ -31,41 +25,20 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         JobManager {
             job_repo: job_repo.clone(),
             lock_repo: lock_repo.clone(),
-            // jobs: Arc::new(Mutex::new(Vec::new())),
-            jobs2: Vec::new(),
+            jobs: Vec::new(),
         }
     }
-    // pub fn register(
-    //     &mut self,
-    //     name: String,
-    //     action: impl JobAction + Send + Sync + 'static,
-    // ) -> Result<(), Error> {
-    //     Ok(self
-    //         .jobs
-    //         .lock()
-    //         .map_err(|e| GeneralError {
-    //             description: e.to_string(),
-    //         })?
-    //         .push(Job::new(name.into(), action)))
-    // }
-    pub fn register2(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
-        self.jobs2.push(Job::new(name.into(), action));
+    pub fn register(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
+        self.jobs.push(Job::new(name.into(), action));
     }
 
-    pub async fn start_all2(&mut self) -> Result<(), Error> {
-        // let mut jobs = &self.jobs2;
-
+    pub async fn start_all(&mut self) -> Result<(), Error> {
         let mut job_repo = self.job_repo.clone();
         let lock_repo = self.lock_repo.clone();
         // tokio::task::spawn(async move {
         loop {
             for job in self
-                .jobs2
-                // .lock()
-                // .map_err(|e| GeneralError {
-                //     description: e.to_string(),
-                // })
-                // .unwrap()
+                .jobs
                 .iter_mut()
                 .filter(|j| Job::get_registered_or_running(&j.status))
             {
@@ -86,7 +59,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
                 //     }
                 //     Err(_e) => {}
                 // };
-                // job.status = Running(tx);
+                job.status = Running(tx);
                 let mut ex = Executor::new(
                     job.name.clone(),
                     job.action.clone(),
@@ -94,90 +67,17 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
                     lock_repo.clone(),
                 );
                 tokio::spawn(async move {
-                    // dbg!("*********");
                     ex.run().await;
                 });
                 // }
                 sleep(Duration::from_secs(2)).await;
-                // }
-                // });
             }
         }
         Ok(())
     }
-    // pub async fn start_all(&mut self) -> Result<(), Error> {
-    //     let mut jobs = Arc::clone(&self.jobs);
-    //
-    //     let mut job_repo = self.job_repo.clone();
-    //     let lock_repo = self.lock_repo.clone();
-    //     // tokio::task::spawn(async move {
-    //     loop {
-    //         for job in jobs
-    //             .lock()
-    //             .map_err(|e| GeneralError {
-    //                 description: e.to_string(),
-    //             })
-    //             .unwrap()
-    //             .iter_mut()
-    //             .filter(|j| j.get_registered_or_running())
-    //         {
-    //             let (tx, mut rx) = oneshot::channel::<JobName>();
-    //             match rx.try_recv() {
-    //                 Ok(n) => {
-    //                     for job in jobs
-    //                         .lock()
-    //                         .map_err(|e| GeneralError {
-    //                             description: e.to_string(),
-    //                         })?
-    //                         // .unwrap()
-    //                         .iter_mut()
-    //                         .filter(|j| j.name == n)
-    //                     {
-    //                         job.status = Suspended;
-    //                     }
-    //                 }
-    //                 Err(_e) => {}
-    //             };
-    //             job.status = Running(tx);
-    //             let mut ex = Executor::new(job.into(), job_repo.clone(), lock_repo.clone());
-    //             tokio::task::spawn(async move {
-    //                 ex.run().await;
-    //             });
-    //             // }
-    //             // sleep(Duration::from_secs(2)).await;
-    //             // }
-    //             // });
-    //         }
-    //     }
-    //     Ok(())
-    // }
-    // pub async fn stop_by_name(&mut self, name: String) -> Result<(), Error> {
-    //     for job in self
-    //         .jobs
-    //         .lock()
-    //         .map_err(|e| GeneralError {
-    //             description: e.to_string(),
-    //         })?
-    //         .iter_mut()
-    //         .filter(|j| j.name == name.clone().into())
-    //     {
-    //         // if job.name.clone() == name.clone().into() {
-    //         let j: Job = job.into();
-    //         return match j.status {
-    //             Running(s) => {
-    //                 s.send(job.name.clone()).unwrap();
-    //                 Ok(())
-    //             }
-    //             _ => Ok(()),
-    //         };
-    //         // }
-    //     }
-    //     Ok(())
-    // }
-    //
-    pub async fn stop_by_name2(self, name: String) -> Result<(), Error> {
+    pub async fn stop_by_name(self, name: String) -> Result<(), Error> {
         for job in self
-            .jobs2
+            .jobs
             // .lock()
             // .map_err(|e| GeneralError {
             //     description: e.to_string(),
@@ -185,8 +85,6 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             .into_iter()
             .filter(|j| j.name == name.clone().into())
         {
-            // if job.name.clone() == name.clone().into() {
-            // let j: Job = job.into();
             return match job.status {
                 Running(s) => {
                     s.send(job.name.clone()).unwrap();
@@ -194,7 +92,6 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
                 }
                 _ => Ok(()),
             };
-            // }
         }
         Ok(())
     }

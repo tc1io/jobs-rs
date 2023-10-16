@@ -1,13 +1,10 @@
 use crate::error::Error;
-use crate::job::Status::{Registered, Running, Suspended};
+use crate::job::Status::{Registered, Running};
 use async_trait::async_trait;
 use derive_more::{Display, From, Into};
-use std::collections::hash_map::Values;
-use std::os::unix::prelude::ExitStatusExt;
 use std::sync::Arc;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::Mutex;
-// use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait JobAction {
@@ -17,22 +14,6 @@ pub trait JobAction {
 #[derive(Default, Clone, From, Into, Eq, Hash, PartialEq, Debug)]
 pub struct JobName(pub String);
 
-// #[derive(Clone)]
-// pub struct Job {
-//     pub name: JobName,
-//     // pub state: Vec<u8>,
-//     pub action: Arc<Mutex<dyn JobAction + Send + Sync>>,
-// }
-
-// impl Job {
-//     pub fn new_with_action(name: JobName, action: impl JobAction + Send + Sync + 'static) -> Self {
-//         Job {
-//             name,
-//             // state: Vec::new(),
-//             action: Arc::new(Mutex::new(action)),
-//         }
-//     }
-// }
 #[derive(Debug)]
 pub enum Status {
     Registered,
@@ -47,7 +28,7 @@ pub enum Status {
 //         match self {
 //             Registered => Registered,
 //             Suspended => Suspended,
-//             Status::Running(sender) => Status::Running(*sender),
+//             Running(sender) => Running(sender.into()),
 //         }
 //     }
 // }
@@ -57,7 +38,6 @@ pub struct Config {
     name: JobName,
 }
 
-// #[derive(Clone)]
 pub struct Job {
     pub name: JobName,
     pub action: Arc<Mutex<dyn JobAction + Send + Sync>>,
@@ -71,23 +51,11 @@ impl Job {
         Job {
             name: name.clone(),
             action: Arc::new(Mutex::new(action)),
-            status: Status::Registered,
+            status: Registered,
             // config: Config { name },
             // state: Vec::new(),
         }
     }
-    // pub fn status()
-    // pub fn get_registered_jobs(jobs: Vec<Job>) -> Vec<Job> {
-    //     jobs.iter().filter(|job| job.registered()).collect()
-    // }
-
-    // pub fn registered(self) -> bool {
-    //     match self.clone().status {
-    //         Running(s) => true,
-    //         _ => false,
-    //     }
-    // }
-    //
     pub fn get_registered_or_running(s: &Status) -> bool {
         match s {
             Registered => true,
@@ -95,46 +63,7 @@ impl Job {
             _ => false,
         }
     }
-
-    // pub async fn suspend_job_by_name(
-    //     jobs: Arc<Mutex<Vec<Job>>>,
-    //     name: JobName,
-    // ) -> Arc<Mutex<Vec<Job>>> {
-    //     let xx = jobs
-    //         .lock()
-    //         .await
-    //         .iter_mut()
-    //         .map(|job| job.status = Suspended)
-    //         .collect();
-    // }
-    // pub fn running(self, job_name: JobName) -> bool {
-    //     match self.clone().status {
-    //         Running(s) => true,
-    //         _ => false,
-    //     }
-    // }
-    // pub fn set_status_running(&mut self, tx: Sender<()>) {
-    //     self.status = Status::Running(tx);
-    // }
-    // pub async fn run(&mut self) -> Result<(), Error> {
-    //     // dbg!("inside run");
-    //     let mut action = self.action.lock().await;
-    //     // other logic will be added
-    //     let _xx = action.call(self.name.clone().into(), Vec::new()).await?;
-    //     Ok(())
-    // }
 }
-
-// impl From<&mut Job> for Job {
-//     fn from(value: &mut Job) -> Self {
-//         *value.into()
-//         // Job {
-//         //     name: value.name,
-//         //     status: value.status,
-//         //     action: value.action,
-//         // }
-//     }
-// }
 
 #[async_trait]
 pub trait JobRepo {
