@@ -1,12 +1,14 @@
 use crate::error::Error;
+use crate::error::Error::GeneralError;
 use crate::executor::Executor;
 use crate::job::Status::{Registered, Running, Suspended};
 use crate::job::{Job, JobAction, JobName, JobRepo, Status};
 use crate::lock::LockRepo;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
-use tokio::sync::{mpsc, Mutex};
+use tokio::time::sleep;
 use tokio_retry::Action;
 
 pub struct JobManager<J, L>
@@ -29,8 +31,18 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             jobs: Arc::new(Mutex::new(Vec::new())),
         }
     }
-    pub async fn register(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
-        self.jobs.lock().await.push(Job::new(name.into(), action))
+    pub fn register(
+        &mut self,
+        name: String,
+        action: impl JobAction + Send + Sync + 'static,
+    ) -> Result<(), Error> {
+        Ok(self
+            .jobs
+            .lock()
+            .map_err(|e| GeneralError {
+                description: e.to_string(),
+            })?
+            .push(Job::new(name.into(), action)))
     }
     pub async fn start_all(&mut self) -> Result<(), Error> {
         let (tx, mut rx) = mpsc::channel::<JobName>(1);
@@ -42,7 +54,15 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             loop {
                 match rx.try_recv() {
                     Ok(n) => {
-                        for job in jobs.lock().await.iter_mut().filter(|j| j.name == n) {
+                        for job in jobs
+                            .lock()
+                            .map_err(|e| GeneralError {
+                                description: e.to_string(),
+                            })
+                            .unwrap()
+                            .iter_mut()
+                            .filter(|j| j.name == n)
+                        {
                             job.status = Suspended;
                         }
                     }
@@ -50,7 +70,10 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
                 };
                 for job in jobs
                     .lock()
-                    .await
+                    .map_err(|e| GeneralError {
+                        description: e.to_string(),
+                    })
+                    .unwrap()
                     .iter_mut()
                     .filter(|j| j.get_registered_or_running())
                 {
@@ -60,12 +83,20 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
                         ex.run().await;
                     });
                 }
+                // sleep(Duration::from_secs(2)).await;
             }
         });
         Ok(())
     }
     pub async fn stop_by_name(&mut self, name: String) -> Result<(), Error> {
-        for job in self.jobs.lock().await.iter_mut() {
+        for job in self
+            .jobs
+            .lock()
+            .map_err(|e| GeneralError {
+                description: e.to_string(),
+            })?
+            .iter_mut()
+        {
             if job.name.clone() == name.clone().into() {
                 return match job.clone().status {
                     Running(s) => {
