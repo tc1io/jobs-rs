@@ -58,40 +58,40 @@ impl Job {
             // lock_ttl: (),
         }
     }
-        pub fn should_run_now(self) -> Result<bool, Error> {
-            if !self.enabled {
-                return Ok(false);
-            }
-            dbg!("", self.last_run);
-            if self.last_run.eq(&0) {
-                return Ok(true);
-            }
-            let dt = UNIX_EPOCH + Dur::from_millis(self.last_run as u64);
-            // let date_time = DateTime::<Utc>::(self.last_run, 0).unwrap();
-            let date_time = DateTime::<Utc>::from(dt);
-            dbg!("", date_time);
-            let schedule = CronSchedule::from_str(self.schedule.expr.as_str()).unwrap();
-            let ff = schedule.after(&date_time).next().unwrap_or(Utc::now());
-            // .next()
-            // .map(|t| t.timestamp_millis())
-            // .unwrap();
-            dbg!("", ff);
-            let next_scheduled_run = schedule
-                .after(&date_time)
-                .next()
-                .map(|t| t.timestamp_millis())
-                .unwrap_or(0);
-            dbg!(
-            "{:?}-----{:?}---- {:?}",
-            self.last_run,
-            next_scheduled_run,
-            Utc::now().timestamp_millis()
-        );
-            if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
-                return Ok(true);
-            }
-            Ok(false)
-        }
+        // pub fn should_run_now(self) -> Result<bool, Error> {
+        //     if !self.enabled {
+        //         return Ok(false);
+        //     }
+        //     dbg!("", self.last_run);
+        //     if self.last_run.eq(&0) {
+        //         return Ok(true);
+        //     }
+        //     let dt = UNIX_EPOCH + Dur::from_millis(self.last_run as u64);
+        //     // let date_time = DateTime::<Utc>::(self.last_run, 0).unwrap();
+        //     let date_time = DateTime::<Utc>::from(dt);
+        //     dbg!("", date_time);
+        //     let schedule = CronSchedule::from_str(self.schedule.expr.as_str()).unwrap();
+        //     let ff = schedule.after(&date_time).next().unwrap_or(Utc::now());
+        //     // .next()
+        //     // .map(|t| t.timestamp_millis())
+        //     // .unwrap();
+        //     dbg!("", ff);
+        //     let next_scheduled_run = schedule
+        //         .after(&date_time)
+        //         .next()
+        //         .map(|t| t.timestamp_millis())
+        //         .unwrap_or(0);
+        //     dbg!(
+        //     "{:?}-----{:?}---- {:?}",
+        //     self.last_run,
+        //     next_scheduled_run,
+        //     Utc::now().timestamp_millis()
+        // );
+        //     if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
+        //         return Ok(true);
+        //     }
+        //     Ok(false)
+        // }
     }
 
 #[async_trait]
