@@ -1,13 +1,13 @@
-use std::str::FromStr;
 use crate::error::Error;
 use async_trait::async_trait;
-use derive_more::{Display, From, Into};
-use std::sync::Arc;
 use chrono::{DateTime, Duration, Utc};
-use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
 use cron::Schedule as CronSchedule;
+use derive_more::{Display, From, Into};
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use std::sync::Arc;
 use std::time::{Duration as Dur, UNIX_EPOCH};
+use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait JobAction {
@@ -30,7 +30,7 @@ impl<'a> Into<&'a str> for &'a JobName {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize,Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Schedule {
     pub expr: String,
 }
@@ -46,53 +46,61 @@ pub struct Job {
     // pub lock_ttl: Duration,
 }
 
+impl AsRef<str> for JobName {
+    fn as_ref(&self) -> &str {
+        self.name.as_str()
+    }
+}
+
 impl Job {
     pub fn new_with_action(name: String, action: impl JobAction + Send + Sync + 'static) -> Self {
         Job {
             name: name.into(),
             state: Vec::new(),
             // action: Arc::new(Mutex::new(action)),
-            schedule: Schedule { expr: "".to_string() },
+            schedule: Schedule {
+                expr: "".to_string(),
+            },
             enabled: false,
             last_run: 0,
             // lock_ttl: (),
         }
     }
-        pub fn should_run_now(self) -> Result<bool, Error> {
-            if !self.enabled {
-                return Ok(false);
-            }
-            dbg!("", self.last_run);
-            if self.last_run.eq(&0) {
-                return Ok(true);
-            }
-            let dt = UNIX_EPOCH + Dur::from_millis(self.last_run as u64);
-            // let date_time = DateTime::<Utc>::(self.last_run, 0).unwrap();
-            let date_time = DateTime::<Utc>::from(dt);
-            dbg!("", date_time);
-            let schedule = CronSchedule::from_str(self.schedule.expr.as_str()).unwrap();
-            let ff = schedule.after(&date_time).next().unwrap_or(Utc::now());
-            // .next()
-            // .map(|t| t.timestamp_millis())
-            // .unwrap();
-            dbg!("", ff);
-            let next_scheduled_run = schedule
-                .after(&date_time)
-                .next()
-                .map(|t| t.timestamp_millis())
-                .unwrap_or(0);
-            dbg!(
+    pub fn should_run_now(self) -> Result<bool, Error> {
+        if !self.enabled {
+            return Ok(false);
+        }
+        dbg!("", self.last_run);
+        if self.last_run.eq(&0) {
+            return Ok(true);
+        }
+        let dt = UNIX_EPOCH + Dur::from_millis(self.last_run as u64);
+        // let date_time = DateTime::<Utc>::(self.last_run, 0).unwrap();
+        let date_time = DateTime::<Utc>::from(dt);
+        dbg!("", date_time);
+        let schedule = CronSchedule::from_str(self.schedule.expr.as_str()).unwrap();
+        let ff = schedule.after(&date_time).next().unwrap_or(Utc::now());
+        // .next()
+        // .map(|t| t.timestamp_millis())
+        // .unwrap();
+        dbg!("", ff);
+        let next_scheduled_run = schedule
+            .after(&date_time)
+            .next()
+            .map(|t| t.timestamp_millis())
+            .unwrap_or(0);
+        dbg!(
             "{:?}-----{:?}---- {:?}",
             self.last_run,
             next_scheduled_run,
             Utc::now().timestamp_millis()
         );
-            if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
-                return Ok(true);
-            }
-            Ok(false)
+        if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
+            return Ok(true);
         }
+        Ok(false)
     }
+}
 
 #[async_trait]
 pub trait JobRepo {
