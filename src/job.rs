@@ -23,7 +23,7 @@ pub struct Schedule {
     pub expr: String,
 }
 
-#[derive(Clone, Serialize, Debug, Deserialize)]
+#[derive(Clone)]
 pub struct Job {
     pub name: JobName,
     pub action: Arc<Mutex<dyn JobAction>>,
@@ -54,48 +54,42 @@ impl Job {
     pub fn new_with_action(name: String, action: impl JobAction + Send + Sync + 'static) -> Self {
         Job {
             name: JobName(name.to_string()),
-            state: Vec::new(),
-            // action: Arc::new(Mutex::new(action)),
-            schedule: Schedule {
-                expr: "".to_string(),
-            },
-            enabled: false,
-            last_run: 0,
-            // lock_ttl: (),
+            action: Arc::new(Mutex::new(action)),
+
         }
     }
     pub fn should_run_now(self) -> Result<bool, Error> {
-        if !self.enabled {
-            return Ok(false);
-        }
-        dbg!("", self.last_run);
-        if self.last_run.eq(&0) {
-            return Ok(true);
-        }
-        let dt = UNIX_EPOCH + Dur::from_millis(self.last_run as u64);
-        // let date_time = DateTime::<Utc>::(self.last_run, 0).unwrap();
-        let date_time = DateTime::<Utc>::from(dt);
-        dbg!("", date_time);
-        let schedule = CronSchedule::from_str(self.schedule.expr.as_str()).unwrap();
-        let ff = schedule.after(&date_time).next().unwrap_or(Utc::now());
-        // .next()
-        // .map(|t| t.timestamp_millis())
-        // .unwrap();
-        dbg!("", ff);
-        let next_scheduled_run = schedule
-            .after(&date_time)
-            .next()
-            .map(|t| t.timestamp_millis())
-            .unwrap_or(0);
-        dbg!(
-            "{:?}-----{:?}---- {:?}",
-            self.last_run,
-            next_scheduled_run,
-            Utc::now().timestamp_millis()
-        );
-        if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
-            return Ok(true);
-        }
+        // if !self.enabled {
+        //     return Ok(false);
+        // }
+        // dbg!("", self.last_run);
+        // if self.last_run.eq(&0) {
+        //     return Ok(true);
+        // }
+        // let dt = UNIX_EPOCH + Dur::from_millis(self.last_run as u64);
+        // // let date_time = DateTime::<Utc>::(self.last_run, 0).unwrap();
+        // let date_time = DateTime::<Utc>::from(dt);
+        // dbg!("", date_time);
+        // let schedule = CronSchedule::from_str(self.schedule.expr.as_str()).unwrap();
+        // let ff = schedule.after(&date_time).next().unwrap_or(Utc::now());
+        // // .next()
+        // // .map(|t| t.timestamp_millis())
+        // // .unwrap();
+        // dbg!("", ff);
+        // let next_scheduled_run = schedule
+        //     .after(&date_time)
+        //     .next()
+        //     .map(|t| t.timestamp_millis())
+        //     .unwrap_or(0);
+        // dbg!(
+        //     "{:?}-----{:?}---- {:?}",
+        //     self.last_run,
+        //     next_scheduled_run,
+        //     Utc::now().timestamp_millis()
+        // );
+        // if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
+        //     return Ok(true);
+        // }
         Ok(false)
     }
 }
@@ -103,6 +97,6 @@ impl Job {
 #[async_trait]
 pub trait JobRepo {
     async fn create_job(&mut self, job: JobConfig) -> Result<bool, Error>;
-    async fn get_job(&mut self, name: JobName) -> Result<Option<Job>, Error>;
+    async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>, Error>;
     async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool, Error>;
 }

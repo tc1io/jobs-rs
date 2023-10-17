@@ -18,4 +18,4 @@ derive_more = "0.99.17"
 
 [[bin]]
 name  = "jm"
-path = "examples/job_repo_demo.rs"
+path = "examples/simple_2.rs"

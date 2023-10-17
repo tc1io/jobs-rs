@@ -34,12 +34,12 @@ impl JobRepo for Repo {
             })?
 
     }
-    async fn get_job(&mut self, name: JobName) -> Result<Option<Job>, Error> {
+    async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>, Error> {
         Ok(self
             .db
             .write()
             .await
-            .get::<Job>(name.as_ref()))
+            .get::<JobConfig>(name.as_ref()))
     }
 
     async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool, Error> {

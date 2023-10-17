@@ -32,7 +32,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
         dbg!("inside run");
         // let mut action = self.job.action.lock().await;
         // other logic will be added
-        let name = self.job.clone().name.clone();
+        let name = self.job.name.clone();
         let name1 = name.clone();
         let ji = self
             .job_repo
