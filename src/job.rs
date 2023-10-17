@@ -16,7 +16,7 @@ pub trait JobAction {
 
 #[derive(Default, Clone, Into, Eq, Hash, PartialEq, Debug, Serialize, Deserialize)]
 pub struct JobName {
-    name: String,
+    pub name: String,
 }
 
 impl From<String> for JobName {
