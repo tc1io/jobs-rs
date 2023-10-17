@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, sleep, Duration};
 use jobs::job::{Job, JobName};
+use jobs::lock::LockData;
 
 #[tokio::main]
 async fn main() {
@@ -50,7 +51,11 @@ pub struct DbRepo {
 }
 
 #[async_trait]
-impl LockRepo for DbRepo {}
+impl LockRepo for DbRepo {
+    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, Error> {
+        todo!()
+    }
+}
 #[async_trait]
 impl JobRepo for DbRepo {
     async fn create_job(&mut self, job: Job) -> Result<bool, Error> {

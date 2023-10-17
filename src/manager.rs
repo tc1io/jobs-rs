@@ -26,7 +26,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> JobMan
     pub async fn register(&mut self, name: String, job_action: impl JobAction + 'static + std::marker::Send + std::marker::Sync) {
 
         self.executors.insert(
-            name.clone().into(),
+            JobName(name.to_string()),
             Executor::new(
                 name.into(),
                 self.job_repo.clone(),

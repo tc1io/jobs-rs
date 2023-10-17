@@ -11,17 +11,17 @@ async fn main() {
         PickleDbDumpPolicy::AutoDump,
         SerializationMethod::Json,
     );
-    let mut lrepo = repos::lock_repo::LRepo::new(ldb);
-    let name  = JobName {
-        name: "dummmy".to_string(),
-    };
-
-    lrepo.acquire_lock( LockData {
-        job_name: "dummy".to_string(),
-        expires: 0,
-        version: 0,
-    })
-        .await
-        .unwrap();
+    let mut lrepo = repos::pickledb::Repo::new(ldb);
+    // let name  = JobName {
+    //     name: "dummmy".to_string(),
+    // };
+    //
+    // lrepo.acquire_lock( LockData {
+    //     job_name: "dummy".to_string(),
+    //     expires: 0,
+    //     version: 0,
+    // })
+    //     .await
+    //     .unwrap();
 }
 

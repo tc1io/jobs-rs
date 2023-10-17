@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use crate::error::Error;
-use crate::job::{Job, JobAction, JobRepo};
-use crate::lock::LockRepo;
+use crate::job::{Job, JobAction, JobConfig, JobRepo};
+use crate::lock::{LockData, LockRepo};
 use crate::job::Schedule;
 
 #[derive(Clone)]
@@ -36,13 +36,14 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
         let name1 = name.clone();
         let ji = self
             .job_repo
-            .create_job(Job {
+            .create_job(JobConfig {
                 name,
                 state: vec![],
                 // action: Arc::new(()),
                 schedule: Schedule { expr: "".to_string() },
                 enabled: false,
                 last_run: 0,
+                lock: LockData { expires: 0, version: 0 },
             })
             .await?;
         if ji {

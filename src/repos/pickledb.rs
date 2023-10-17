@@ -1,10 +1,11 @@
 use crate::error::Error;
-use crate::job::{Job, JobName, JobRepo};
+use crate::job::{Job, JobConfig, JobName, JobRepo};
 use async_trait::async_trait;
 use pickledb::PickleDb;
 use std::sync::Arc;
 use chrono::Utc;
 use tokio::sync::RwLock;
+use crate::lock::{LockData, LockRepo};
 
 #[derive(Clone)]
 pub struct Repo {
@@ -21,7 +22,7 @@ impl Repo {
 
 #[async_trait]
 impl JobRepo for Repo {
-    async fn create_job(&mut self, job: Job) -> Result<bool, Error> {
+    async fn create_job(&mut self, job: JobConfig) -> Result<bool, Error> {
         println!("create job");
         self.db
             .write()
@@ -38,11 +39,13 @@ impl JobRepo for Repo {
             .db
             .write()
             .await
-            .get::<Job>((&name).into()))
+            .get::<Job>(name.as_ref()))
     }
 
     async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool, Error> {
-        let mut job = self.get_job(name.clone()).await.unwrap().unwrap();
+        let name1 = name.clone();
+        let mut job = self.get_job(name.into()).await.unwrap().unwrap();
+
         job.state = state;
         // let name1 = name.clone()
         // job.last_run = Utc::now().timestamp_millis();
@@ -50,11 +53,45 @@ impl JobRepo for Repo {
             .write()
             .await
             // .map_err(|e| JobError::DatabaseError(e.to_string()))?
-            .set((&name).into(), &job)
+            .set((name1.as_ref() ), &job)
             .unwrap();
         println!("state saved");
         Ok(true)
     }
 }
 
+#[async_trait]
+impl LockRepo for Repo {
+    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool,Error > {
+        // println!("acquire lock");
+        // let mut acquire = false;
+       // TODO: try functional approach
+        // let existing_lock = self
+        //     .db
+        //     .read()
+        //     .await
+        //     .get::<LockData>(lock_data.job_name);
+        // // .unwrap();
+        // // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+        // match existing_lock {
+        //     Some(lock) => {
+        //         if lock.expires < Utc::now().timestamp_millis() {
+        //             acquire = true;
+        //         }
+        //     }
+        //     None => acquire = true,
+        // }
+        // if acquire {
+        // self.db
+        //     .write()
+        //     .await
+        //     .set(lock_data.job_name.as_str(), &lock_data)
+        //     .map(|_| Ok(true))
+        //     .map_err(|e| Error::GeneralError { description: "lock error".to_string() })?
+        // } else {
+        //     Ok(false)
+        // }
+        Ok(false)
+    }
+}
 

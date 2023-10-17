@@ -8,6 +8,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration as Dur, UNIX_EPOCH};
 use tokio::sync::Mutex;
+use crate::lock::LockData;
 
 #[async_trait]
 pub trait JobAction {
@@ -15,20 +16,7 @@ pub trait JobAction {
 }
 
 #[derive(Default, Clone, Into, Eq, Hash, PartialEq, Debug, Serialize, Deserialize)]
-pub struct JobName {
-    pub name: String,
-}
-
-impl From<String> for JobName {
-    fn from(name: String) -> Self {
-        JobName { name }
-    }
-}
-impl<'a> Into<&'a str> for &'a JobName {
-    fn into(self) -> &'a str {
-        &self.name
-    }
-}
+pub struct JobName(pub String);
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Schedule {
@@ -38,24 +26,34 @@ pub struct Schedule {
 #[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct Job {
     pub name: JobName,
+    pub action: Arc<Mutex<dyn JobAction>>,
+}
+#[derive(Clone, Serialize, Debug, Deserialize)]
+pub struct JobConfig {
+    pub name: JobName,
     pub state: Vec<u8>,
-    // pub action: Arc<Mutex<dyn JobAction>>,
     pub schedule: Schedule,
     pub enabled: bool,
     pub last_run: i64,
-    // pub lock_ttl: Duration,
+    pub lock: LockData
 }
 
 impl AsRef<str> for JobName {
     fn as_ref(&self) -> &str {
-        self.name.as_str()
+        self.0.as_str()
     }
 }
+
+// impl AsRef<JobName> for str {
+//     fn as_ref(&self) -> &JobName {
+//         self.name
+//     }
+// }
 
 impl Job {
     pub fn new_with_action(name: String, action: impl JobAction + Send + Sync + 'static) -> Self {
         Job {
-            name: name.into(),
+            name: JobName(name.to_string()),
             state: Vec::new(),
             // action: Arc::new(Mutex::new(action)),
             schedule: Schedule {
@@ -104,7 +102,7 @@ impl Job {
 
 #[async_trait]
 pub trait JobRepo {
-    async fn create_job(&mut self, job: Job) -> Result<bool, Error>;
+    async fn create_job(&mut self, job: JobConfig) -> Result<bool, Error>;
     async fn get_job(&mut self, name: JobName) -> Result<Option<Job>, Error>;
     async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool, Error>;
 }
