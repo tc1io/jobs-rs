@@ -23,7 +23,7 @@ pub struct Schedule {
     pub expr: String,
 }
 
-#[derive(Clone)]
+
 pub struct Job {
     pub name: JobName,
     pub action: Arc<Mutex<dyn JobAction>>,
