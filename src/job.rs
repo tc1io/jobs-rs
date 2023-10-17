@@ -18,7 +18,7 @@ pub struct JobName(pub String);
 pub enum Status {
     Registered,
     Suspended,
-    Running(Sender<JobName>),
+    Running(Sender<()>),
     // Errored,
     // Cancelled,
 }

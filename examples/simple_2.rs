@@ -42,7 +42,7 @@ async fn main() {
     let _ = manager.start_all().await.unwrap();
     sleep(Duration::from_secs(4)).await;
     manager.stop_by_name("project-puller".to_string()).await;
-    sleep(Duration::from_secs(20)).await;
+    sleep(Duration::from_secs(10)).await;
 }
 
 #[derive(Clone)]

@@ -1,10 +1,10 @@
 use crate::error::Error;
 use crate::executor::Executor;
-use crate::job::Status::{Registered, Running, Suspended};
-use crate::job::{Job, JobAction, JobName, JobRepo, Status};
+use crate::job::Status::Running;
+use crate::job::{Job, JobAction, JobName, JobRepo};
 use crate::lock::LockRepo;
 use std::time::Duration;
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::oneshot;
 use tokio::time::sleep;
 use tokio_retry::Action;
 
@@ -35,59 +35,34 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
     pub async fn start_all(&mut self) -> Result<(), Error> {
         let mut job_repo = self.job_repo.clone();
         let lock_repo = self.lock_repo.clone();
-        // tokio::task::spawn(async move {
-        loop {
-            for job in self
-                .jobs
-                .iter_mut()
-                .filter(|j| Job::get_registered_or_running(&j.status))
-            {
-                let (tx, mut rx) = oneshot::channel::<JobName>();
-                // match rx.try_recv() {
-                //     Ok(n) => {
-                //         self.jobs2
-                //             // .map_err(|e| GeneralError {
-                //             //     description: e.to_string(),
-                //             // })?
-                //             // .unwrap()
-                //             .iter_mut()
-                //             .filter(|j| j.name == n)
-                //             .map(|job| job.status = Suspended);
-                //         // {
-                //         //     job.status = Suspended;
-                //         // }
-                //     }
-                //     Err(_e) => {}
-                // };
-                job.status = Running(tx);
-                let mut ex = Executor::new(
-                    job.name.clone(),
-                    job.action.clone(),
-                    job_repo.clone(),
-                    lock_repo.clone(),
-                );
-                tokio::spawn(async move {
-                    ex.run().await;
-                });
-                // }
-                sleep(Duration::from_secs(2)).await;
-            }
+        for job in self
+            .jobs
+            .iter_mut()
+            .filter(|j| Job::get_registered_or_running(&j.status))
+        {
+            let (tx, mut rx) = oneshot::channel();
+            job.status = Running(tx);
+            let name = job.name.clone();
+            let action = job.action.clone();
+            let j = job_repo.clone();
+            let l = lock_repo.clone();
+            tokio::spawn(async move {
+                let mut ex = Executor::new(name, action, j, l, rx);
+                ex.run().await;
+            });
+            sleep(Duration::from_secs(2)).await;
         }
         Ok(())
     }
     pub async fn stop_by_name(self, name: String) -> Result<(), Error> {
         for job in self
             .jobs
-            // .lock()
-            // .map_err(|e| GeneralError {
-            //     description: e.to_string(),
-            // })?
             .into_iter()
             .filter(|j| j.name == name.clone().into())
         {
             return match job.status {
                 Running(s) => {
-                    s.send(job.name.clone()).unwrap();
+                    s.send(());
                     Ok(())
                 }
                 _ => Ok(()),
