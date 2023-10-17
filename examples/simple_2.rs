@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use futures::FutureExt;
-// use jobs::{JobError, JobInfo, JobManager, JobRepo, JobRunner, LockData, LockRepo, Schedule};
+use futures::{FutureExt, TryFutureExt};
+use jobs::job::{Job, JobName};
 use jobs::{error::Error, job::JobAction, job::JobRepo, lock::LockRepo, manager::JobManager};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
@@ -53,7 +53,46 @@ pub struct DbRepo {
 #[async_trait]
 impl LockRepo for DbRepo {}
 #[async_trait]
-impl JobRepo for DbRepo {}
+impl JobRepo for DbRepo {
+    // async fn create_job(&mut self, job: Job) -> Result<bool, Error> {
+    //     dbg!("2");
+    //     println!("create_job");
+    //     let name = (&job.name).into();
+    //     self.db
+    //         .write()
+    //         .await
+    //         .set(name, &job)
+    //         .map(|_| Ok(true))
+    //         .map_err(|e| Error::GeneralError {
+    //             description: "job creation failed".to_string(),
+    //         })?
+    // }
+    //
+    // async fn get_job(&mut self, name: JobName) -> Result<Option<Job>, Error> {
+    //     Ok(self
+    //         .db
+    //         .write()
+    //         .await
+    //         // .map_err(|e| Error::GeneralError { description: "".to_string() })?
+    //         .get::<Job>((&name).into()))
+    // }
+    //
+    // async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool, Error> {
+    //     let mut job = self.get_job(name.clone()).await.unwrap().unwrap();
+    //     job.state = state;
+    //     // let name1 = name.clone()
+    //     job.last_run = Utc::now().timestamp_millis();
+    //     dbg!("{:?}", job.last_run);
+    //     self.db
+    //         .write()
+    //         .await
+    //         // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+    //         .set((&name).into(), &job)
+    //         .unwrap();
+    //     println!("state saved");
+    //     Ok(true)
+    // }
+}
 struct JobImplementer {
     // name: String,
     // db: PickleDb,

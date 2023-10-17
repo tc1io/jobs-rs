@@ -16,3 +16,6 @@ chrono = {version = "0.4.31", features = ["default"]}
 cron = "0.12.0"
 derive_more = "0.99.17"
 
+[[bin]]
+name  = "jm"
+path = "examples/simple_2.rs"

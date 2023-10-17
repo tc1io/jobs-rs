@@ -6,6 +6,7 @@ pub mod executor;
 pub mod job;
 pub mod lock;
 pub mod manager;
+pub mod repos;
 
 // #[derive(Debug)]
 // pub enum JobError {

@@ -1,10 +1,8 @@
 use crate::error::Error;
-use crate::error::Error::GeneralError;
+use crate::job::Schedule;
 use crate::job::{Job, JobAction, JobName, JobRepo};
 use crate::lock::LockRepo;
 use std::sync::Arc;
-use std::thread::sleep;
-use std::time::Duration;
 use tokio::sync::oneshot::Receiver;
 use tokio::sync::Mutex;
 
@@ -50,6 +48,43 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
             .await?;
         self.cancel_signal_rx.try_recv();
         dbg!("done with call()");
+        // =======
+        //         dbg!("inside run");
+        //         // let mut action = self.job.action.lock().await;
+        //         // other logic will be added
+        //         let name = self.job.clone().name.clone();
+        //         let name1 = name.clone();
+        //         let ji = self
+        //             .job_repo
+        //             .create_job(Job {
+        //                 name,
+        //                 state: vec![],
+        //                 // action: Arc::new(()),
+        //                 schedule: Schedule { expr: "".to_string() },
+        //                 enabled: false,
+        //                 last_run: 0,
+        //             })
+        //             .await?;
+        //         if ji {
+        //             println!("job created")
+        //         }
+        //
+        //        match self
+        //             .job_repo
+        //             .get_job(name1.clone())
+        //             .await? {
+        //            None => {}
+        //            Some(value) => {
+        //                // Job::should_run_now(value).unwrap().expect("TODO: panic message")
+        //            }
+        //        }
+        //         // let ji = self
+        //         //     .job_repo
+        //         //     .create_job(ji.clone())
+        //         //     .await?;
+        //
+        //         // let _r = self.job_repo.create_job(ji.clone()).await?;
+        // >>>>>>> master
         Ok(())
     }
 }
