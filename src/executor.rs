@@ -1,7 +1,7 @@
 use crate::error::Error;
+use crate::job::{Job, JobAction, JobConfig, JobRepo, JobName};
+use crate::lock::{LockData, LockRepo};
 use crate::job::Schedule;
-use crate::job::{Job, JobAction, JobName, JobRepo};
-use crate::lock::LockRepo;
 use std::sync::Arc;
 use tokio::sync::oneshot::Receiver;
 use tokio::sync::Mutex;
@@ -37,12 +37,28 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
         }
     }
     pub async fn run(&mut self) -> Result<(), Error> {
-        // dbg!("inside run");
+        dbg!("inside run");
         let mut action = self.action.lock().await;
         // .map_err(|e| GeneralError {
         //     description: e.to_string(),
         // })?;
         // other logic will be added
+
+        let name = self.job_name.clone();
+        // let name1 = name.clone();
+        dbg!("inside run -1 ");
+        let ji = self
+            .job_repo
+            .create_job(JobConfig {
+                name,
+                state: vec![],
+                // action: Arc::new(()),
+                schedule: Schedule { expr: "".to_string() },
+                enabled: false,
+                last_run: 0,
+                lock: LockData { expires: 0, version: 0 },
+            }).await;
+
         let _xx = action
             .call(self.job_name.clone().into(), Vec::new())
             .await?;

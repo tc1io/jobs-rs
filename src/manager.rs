@@ -28,8 +28,20 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             jobs: Vec::new(),
         }
     }
+    // pub async fn register(&mut self, name: String, job_action: impl JobAction + 'static + std::marker::Send + std::marker::Sync) {
+    //     self.executors.insert(
+    //         JobName(name.to_string()),
+    //         Executor::new(
+    //             name.into(),
+    //             self.job_repo.clone(),
+    //             self.lock_repo.clone(),
+    //             job_action,
+    //         )
+    //     );
+    // }
     pub fn register(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
-        self.jobs.push(Job::new(name.into(), action));
+        self.jobs.push(Job::new(JobName(name.clone().into()), action));
+
     }
 
     pub async fn start_all(&mut self) -> Result<(), Error> {
@@ -58,7 +70,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         for job in self
             .jobs
             .into_iter()
-            .filter(|j| j.name == name.clone().into())
+            .filter(|j| j.name == JobName(name.clone().into()))
         {
             return match job.status {
                 Running(s) => {
