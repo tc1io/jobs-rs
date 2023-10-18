@@ -2,9 +2,19 @@ use crate::error::Error;
 use crate::job::Schedule;
 use crate::job::{Job, JobAction, JobConfig, JobName, JobRepo};
 use crate::lock::{LockData, LockRepo};
+use futures::FutureExt;
 use std::sync::Arc;
+use std::thread::sleep;
+// use std::time;
+use crate::error::Error::GeneralError;
+use std::time::{Duration, Instant};
+use tokio::select;
+use tokio::sync::oneshot::error::TryRecvError;
 use tokio::sync::oneshot::Receiver;
-use tokio::sync::Mutex;
+use tokio::sync::{oneshot, Mutex};
+use tokio::time;
+use tokio::time::Timeout;
+use tokio_timer::Delay;
 
 // #[derive(Clone)]
 pub struct Executor<J, L>
@@ -41,7 +51,19 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
     }
     pub async fn run(&mut self) -> Result<(), Error> {
         dbg!("inside run");
+        let mut interval = time::interval(time::Duration::from_secs(
+            self.job_config.clone().check_interval_sec,
+        ));
         loop {
+            match self.cancel_signal_rx.try_recv() {
+                Ok(_) => {
+                    dbg!("received stopped signal....", self.job_name.clone());
+                    return Ok(());
+                }
+                Err(e) => {}
+            }
+            interval.tick().await; // TODO: waits for timer.. should be a better solution
+
             let mut action = self.action.lock().await;
             match self
                 .job_repo
@@ -52,6 +74,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                         .job_repo
                         .create_job(JobConfig {
                             name: self.job_name.clone().into(),
+                            check_interval_sec: 0,
                             state: vec![],
                             schedule: Schedule { expr: "".to_string() },
                             enabled: false,
@@ -67,9 +90,8 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
             let _xx = action
                 .call(self.job_name.clone().into(), Vec::new())
                 .await?;
-            self.cancel_signal_rx.try_recv();
-            dbg!("done with call()");
         }
+
 
 //         loop {
 //             let mut action = self.action.lock().await;
@@ -123,3 +145,41 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
         Ok(())
     }
 }
+
+// ======= kept for reference.. Aravind will remove
+//         dbg!("inside run");
+//         // let mut action = self.job.action.lock().await;
+//         // other logic will be added
+//         let name = self.job.clone().name.clone();
+//         let name1 = name.clone();
+//         let ji = self
+//             .job_repo
+//             .create_job(Job {
+//                 name,
+//                 state: vec![],
+//                 // action: Arc::new(()),
+//                 schedule: Schedule { expr: "".to_string() },
+//                 enabled: false,
+//                 last_run: 0,
+//             })
+//             .await?;
+//         if ji {
+//             println!("job created")
+//         }
+//
+//        match self
+//             .job_repo
+//             .get_job(name1.clone())
+//             .await? {
+//            None => {}
+//            Some(value) => {
+//                // Job::should_run_now(value).unwrap().expect("TODO: panic message")
+//            }
+//        }
+//         // let ji = self
+//         //     .job_repo
+//         //     .create_job(ji.clone())
+//         //     .await?;
+//
+//         // let _r = self.job_repo.create_job(ji.clone()).await?;
+// >>>>>>> master

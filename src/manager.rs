@@ -80,6 +80,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         {
             return match job.status {
                 Running(s) => {
+                    dbg!("sending the stop signal now....");
                     s.send(());
                     Ok(())
                 }

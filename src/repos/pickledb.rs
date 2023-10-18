@@ -1,12 +1,11 @@
 use crate::error::Error;
 use crate::job::{Job, JobConfig, JobName, JobRepo};
+use crate::lock::{LockData, LockRepo};
 use async_trait::async_trait;
 use chrono::Utc;
 use pickledb::PickleDb;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::lock::{LockData, LockRepo};
-
 
 #[derive(Clone)]
 pub struct Repo {
@@ -24,7 +23,7 @@ impl Repo {
 #[async_trait]
 impl JobRepo for Repo {
     async fn create_job(&mut self, job: JobConfig) -> Result<bool, Error> {
-        println!("create job");
+        dbg!("create job");
         self.db
             .write()
             .await
@@ -33,7 +32,6 @@ impl JobRepo for Repo {
             .map_err(|e| Error::GeneralError {
                 description: "job creation failed".to_string(),
             })?
-
     }
     async fn update_job(&mut self, job: JobConfig) -> Result<bool, Error> {
         dbg!("Update job");
@@ -47,16 +45,8 @@ impl JobRepo for Repo {
             })?
     }
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>, Error> {
-        dbg!("inside get job");
-        println!(" inside  get job {:?}",name.clone() );
-        Ok(self
-            .db
-            .write()
-            .await
-            .get::<JobConfig>(name.as_ref()))
-
+        Ok(self.db.write().await.get::<JobConfig>(name.as_ref()))
     }
-
     async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool, Error> {
         let name1 = name.clone();
         let mut job = self.get_job(name.into()).await.unwrap().unwrap();
@@ -68,7 +58,7 @@ impl JobRepo for Repo {
             .write()
             .await
             // .map_err(|e| JobError::DatabaseError(e.to_string()))?
-            .set((name1.as_ref() ), &job)
+            .set((name1.as_ref()), &job)
             .unwrap();
         println!("state saved");
         Ok(true)
@@ -77,10 +67,10 @@ impl JobRepo for Repo {
 
 #[async_trait]
 impl LockRepo for Repo {
-    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool,Error > {
+    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, Error> {
         // println!("acquire lock");
         // let mut acquire = false;
-       // TODO: try functional approach
+        // TODO: try functional approach
         // let existing_lock = self
         //     .db
         //     .read()
@@ -109,4 +99,3 @@ impl LockRepo for Repo {
         Ok(false)
     }
 }
-
