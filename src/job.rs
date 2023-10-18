@@ -66,7 +66,7 @@ pub struct JobConfig {
     pub schedule: Schedule,
     pub enabled: bool,
     pub last_run: i64,
-    // pub lock: LockData,
+    pub lock: LockData,
 }
 
 impl JobConfig {
@@ -77,7 +77,7 @@ impl JobConfig {
             schedule,
             enabled: true,
             last_run: Default::default(),
-            // lock: LockData {},
+            lock: LockData { expires: 0, version: 0 },
         }
     }
 }

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use futures::{FutureExt, TryFutureExt};
-use jobs::job::{Job, JobName, Schedule};
+use jobs::job::{Job, JobConfig, JobName, Schedule};
 use jobs::{
     error::Error, job::JobAction, job::JobRepo, lock::LockRepo, manager::JobManager, repos,
 };
@@ -66,7 +66,7 @@ pub struct DbRepo {
 #[async_trait]
 
 impl LockRepo for DbRepo {
-    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, Error> {
+    async fn acquire_lock(&mut self, jc: JobConfig) -> Result<bool, Error> {
         todo!()
     }
 }
