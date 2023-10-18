@@ -1,6 +1,7 @@
 use std::println;
 use crate::error::Error;
 use crate::job::Status::{Registered, Running};
+use crate::lock::LockData;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use cron::Schedule as CronSchedule;
@@ -11,7 +12,6 @@ use std::sync::Arc;
 use std::time::{Duration as Dur, UNIX_EPOCH};
 use tokio::sync::oneshot::Sender;
 use tokio::sync::Mutex;
-use crate::lock::LockData;
 
 #[async_trait]
 pub trait JobAction {
@@ -51,13 +51,13 @@ pub struct Config {
 pub struct Job {
     pub name: JobName,
     pub action: Arc<Mutex<dyn JobAction + Send + Sync>>,
+    pub schedule: Schedule,
     pub status: Status,
 }
 
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct Schedule {
-    pub expr: String,
+    pub expr: String, // TODO: consider alias
 }
 
 #[derive(Clone, Serialize, Debug, Deserialize)]
@@ -67,7 +67,20 @@ pub struct JobConfig {
     pub schedule: Schedule,
     pub enabled: bool,
     pub last_run: i64,
-    pub lock: LockData
+    pub lock: LockData,
+}
+
+impl JobConfig {
+    pub fn new(name: JobName, schedule: Schedule) -> Self {
+        JobConfig {
+            name,
+            state: Default::default(),
+            schedule,
+            enabled: true,
+            last_run: Default::default(),
+            lock: LockData { expires: 0, version: 0 },
+        }
+    }
 }
 
 impl AsRef<str> for JobName {
@@ -87,7 +100,6 @@ impl AsRef<str> for JobName {
 //     // pub lock_ttl: Duration,
 // }
 
-
 // impl AsRef<JobName> for str {
 //     fn as_ref(&self) -> &JobName {
 //         self.name
@@ -95,11 +107,15 @@ impl AsRef<str> for JobName {
 // }
 
 impl Job {
-    pub fn new(name: JobName, action: impl JobAction + Send + Sync + 'static) -> Self {
+    pub fn new(
+        name: JobName,
+        action: impl JobAction + Send + Sync + 'static,
+        schedule: Schedule,
+    ) -> Self {
         Job {
             name: JobName(name.into()),
             action: Arc::new(Mutex::new(action)),
-
+            schedule,
             status: Status::Registered,
         }
     }
@@ -139,9 +155,9 @@ impl Job {
         //     name,
         //     action: Arc::new(Mutex::new(action)),
         //     status: Registered,
-            // config: Config { name },
-            // state: Vec::new(),
-        }
+        // config: Config { name },
+        // state: Vec::new(),
+    }
 
     pub fn get_registered_or_running(s: &Status) -> bool {
         match s {
@@ -183,7 +199,7 @@ impl Job {
     //         return Ok(true);
     //     }
     //     Ok(false)
-    }
+}
 #[async_trait]
 pub trait JobRepo {
     async fn create_job(&mut self, job: JobConfig) -> Result<bool, Error>;

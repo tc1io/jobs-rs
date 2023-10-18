@@ -1,18 +1,19 @@
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use futures::{FutureExt, TryFutureExt};
-use jobs::{error::Error, job::JobAction, job::JobRepo, lock::LockRepo, manager::JobManager, repos};
-use jobs::job::{Job, JobName};
+use jobs::job::{Job, JobName, Schedule};
+use jobs::{
+    error::Error, job::JobAction, job::JobRepo, lock::LockRepo, manager::JobManager, repos,
+};
 
+use jobs::lock::LockData;
+use jobs::repos::pickledb::Repo;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::ops::Add;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, sleep, Duration};
-use jobs::lock::LockData;
-use jobs::repos::pickledb::Repo;
-
 
 #[tokio::main]
 async fn main() {
@@ -35,24 +36,27 @@ async fn main() {
     let job2 = JobImplementer {
         // name: "".to_string(),
     };
-    let job3 = JobImplementer {
-        // name: "".to_string(),
-    };
-    let job4 = JobImplementer {
-        // name: "".to_string(),
-    };
-
 
     let mut manager = JobManager::<Repo, Repo>::new(db_repo, lock_repo);
-    manager.register(String::from("project-updater"), job1);
-    manager.register(String::from("project-puller"), job2);
-    manager.register(String::from("project-creater"), job3);
-    manager.register(String::from("project-test"), job4);
+    manager.register(
+        String::from("project-updater"),
+        job1,
+        Schedule {
+            expr: "* */3 * * * *".to_string(),
+        },
+    );
+    manager.register(
+        String::from("project-puller"),
+        job2,
+        Schedule {
+            expr: "* */2 * * * *".to_string(),
+        },
+    );
+
     let _ = manager.start_all().await.unwrap();
     sleep(Duration::from_secs(4)).await;
     manager.stop_by_name("project-puller".to_string()).await;
     sleep(Duration::from_secs(10)).await;
-
 }
 
 #[derive(Clone)]
