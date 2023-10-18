@@ -19,4 +19,4 @@ tokio-timer = "0.2.13"
 
 [[bin]]
 name  = "jm"
-path = "examples/simple_2.rs"
+path = "examples/job_repo_demo.rs"

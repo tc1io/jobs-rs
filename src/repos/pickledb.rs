@@ -1,14 +1,14 @@
+use std::ops::Add;
 use crate::error::Error;
 use crate::job::{Job, JobConfig, JobName, JobRepo};
 use crate::lock::{LockData, LockRepo};
 use async_trait::async_trait;
-use chrono::{Duration, Utc};
+use chrono::{Utc};
 use pickledb::PickleDb;
 use std::sync::Arc;
-use std::thread::sleep;
 use tokio::sync::RwLock;
+use tokio::time::{interval, sleep, Duration};
 
-use tokio::time::interval;
 
 
 #[derive(Clone)]
@@ -32,7 +32,7 @@ impl JobRepo for Repo {
             .write()
             .await
             .set(job.name.as_ref(), &job)
-            .map(|_| Ok(true)) // TODO
+            .map(|_| Ok(true))
             .map_err(|e| Error::GeneralError {
                 description: "job creation failed".to_string(),
             })?
@@ -93,7 +93,7 @@ impl LockRepo for Repo {
             Ok(false)
         }
     }
-    // async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, Error> {
+    // async fn refresh_lock(&mut self, lock_data: JobConfig) -> Result<bool, Error> {
     //     let mut refresh_interval = interval(Duration::from_secs(lock_data.ttl.as_secs() / 2));
     //     loop {
     //         refresh_interval.tick().await;
@@ -104,29 +104,30 @@ impl LockRepo for Repo {
     //             .read()
     //             .await
     //             // .map_err(|e| JobError::DatabaseError(e.to_string()))?
-    //             .get::<LockData>(lock_data.job_name.as_str());
+    //             .get::<JobConfig>(lock_data.job_name.as_str());
     //         match existing_lock {
     //             // match existing_lock {
     //             Some(mut lock) => {
     //                 dbg!("some");
-    //                 if lock.expires < Utc::now().timestamp_millis() {
+    //                 if lock.lock.expires < Utc::now().timestamp_millis() {
     //                     println!("lock expired. unable to refresh. Try again");
-    //                     Err(JobError::LockError(
-    //                         format!("lock expired. unable to refresh").to_string(),
-    //                     ))
+    //                     // Err(JobError::LockError(
+    //                     //     format!("lock expired. unable to refresh").to_string(),
+    //                     // ))
     //                     // Ok(false)
     //                 } else {
     //                     dbg!("some else");
     //                     lock.expires = Utc::now()
     //                         .timestamp_millis()
-    //                         .add(lock.ttl.as_millis() as i64);
-    //                     lock.version = lock.version.add(1);
+    //                         .add(lock.lock.ttl.as_millis() as i64);
+    //                     lock.version = lock.lock.version.add(1);
     //                     dbg!(lock.job_name.as_str());
     //                     self.db
     //                         .write()
     //                         .await
-    //                         .set(lock.job_name.as_str(), &lock)
-    //                         .map_err(|e| JobError::DatabaseError(e.to_string()))?;
+    //                         .set(lock.name.0.as_str(), &lock)
+    //                         .map_err(|e| Error::GeneralError { description: "lock error".to_string() })?;
+    //                         // .map_err(|e| JobError::DatabaseError(e.to_string()))?;
     //                     // .map_err(|e| JobError::DatabaseError(e.to_string()))?
     //                     // .set(lock.job_name.as_str(), &lock)
     //                     // .await
@@ -152,7 +153,7 @@ impl LockRepo for Repo {
     //             }
     //         }?;
     //         dbg!("here");
-    //         sleep(Duration::from_secs(lock_data.ttl.as_secs() / 2));
+    //         sleep(Duration::from_secs(lock_data.ttl.as_secs() / 2)).await;
     //     }
     // }
 }

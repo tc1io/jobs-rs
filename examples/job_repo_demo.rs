@@ -20,6 +20,7 @@ async fn main() {
     repo.create_job(JobConfig {
         // name: JobName { name: "dummy".to_string() },
         name: job_name.clone(),
+        check_interval_sec: 0,
         state: vec![],
         schedule: Schedule {
             expr: "".to_string(),
@@ -53,6 +54,7 @@ async fn main() {
     repo.acquire_lock(JobConfig {
 
         name: job_name1.into(),
+        check_interval_sec: 0,
         state: vec![],
         schedule: Schedule {
             expr: "".to_string(),
