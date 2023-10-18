@@ -1,3 +1,4 @@
+use std::println;
 use crate::error::Error;
 use crate::job::Status::{Registered, Running};
 use async_trait::async_trait;
@@ -186,6 +187,7 @@ impl Job {
 #[async_trait]
 pub trait JobRepo {
     async fn create_job(&mut self, job: JobConfig) -> Result<bool, Error>;
+    async fn update_job(&mut self, job: JobConfig) -> Result<bool, Error>;
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>, Error>;
     async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool, Error>;
 }

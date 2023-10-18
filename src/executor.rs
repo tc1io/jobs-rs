@@ -39,26 +39,27 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
     pub async fn run(&mut self) -> Result<(), Error> {
         dbg!("inside run");
         let mut action = self.action.lock().await;
-        // .map_err(|e| GeneralError {
-        //     description: e.to_string(),
-        // })?;
-        // other logic will be added
+        match self
+           .job_repo
+           .get_job(self.job_name.clone().into())
+           .await? {
+           None => Ok({
+               self
+                   .job_repo
+                   .create_job(JobConfig {
+                       name: self.job_name.clone().into(),
+                       state: vec![],
+                       schedule: Schedule { expr: "".to_string() },
+                       enabled: false,
+                       last_run: 0,
+                       lock: LockData { expires: 0, version: 0 },
+                   }).await?;
+           }),
+           Some(val) => Ok({ self.job_repo.update_job(val).await?; }),
+           Some(val) => Err({self.job_repo.update_job(val).await?; })
+        }.expect("TODO: panic message");
 
-        let name = self.job_name.clone();
-        // let name1 = name.clone();
         dbg!("inside run -1 ");
-        let ji = self
-            .job_repo
-            .create_job(JobConfig {
-                name,
-                state: vec![],
-                // action: Arc::new(()),
-                schedule: Schedule { expr: "".to_string() },
-                enabled: false,
-                last_run: 0,
-                lock: LockData { expires: 0, version: 0 },
-            }).await;
-
         let _xx = action
             .call(self.job_name.clone().into(), Vec::new())
             .await?;

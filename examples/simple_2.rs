@@ -35,11 +35,19 @@ async fn main() {
     let job2 = JobImplementer {
         // name: "".to_string(),
     };
+    let job3 = JobImplementer {
+        // name: "".to_string(),
+    };
+    let job4 = JobImplementer {
+        // name: "".to_string(),
+    };
 
 
     let mut manager = JobManager::<Repo, Repo>::new(db_repo, lock_repo);
     manager.register(String::from("project-updater"), job1);
     manager.register(String::from("project-puller"), job2);
+    manager.register(String::from("project-creater"), job3);
+    manager.register(String::from("project-test"), job4);
     let _ = manager.start_all().await.unwrap();
     sleep(Duration::from_secs(4)).await;
     manager.stop_by_name("project-puller".to_string()).await;
