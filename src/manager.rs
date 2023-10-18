@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::executor::Executor;
 use crate::job::Status::Running;
-use crate::job::{Job, JobAction, JobName, JobRepo};
+use crate::job::{Job, JobAction, JobName, JobRepo, Schedule};
 use crate::lock::LockRepo;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -39,9 +39,14 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
     //         )
     //     );
     // }
-    pub fn register(&mut self, name: String, action: impl JobAction + Send + Sync + 'static) {
-        self.jobs.push(Job::new(JobName(name.clone().into()), action));
-
+    pub fn register(
+        &mut self,
+        name: String,
+        action: impl JobAction + Send + Sync + 'static,
+        schedule: Schedule,
+    ) {
+        self.jobs
+            .push(Job::new(JobName(name.clone().into()), action, schedule));
     }
 
     pub async fn start_all(&mut self) -> Result<(), Error> {
@@ -56,10 +61,11 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             job.status = Running(tx);
             let name = job.name.clone();
             let action = job.action.clone();
+            let schedule = job.schedule.clone();
             let j = job_repo.clone();
             let l = lock_repo.clone();
             tokio::spawn(async move {
-                let mut ex = Executor::new(name, action, j, l, rx);
+                let mut ex = Executor::new(name, action, schedule, j, l, rx);
                 ex.run().await;
             });
             sleep(Duration::from_secs(2)).await;
