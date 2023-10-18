@@ -62,6 +62,7 @@ pub struct Schedule {
 #[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct JobConfig {
     pub name: JobName,
+    pub check_interval_sec: u64,
     pub state: Vec<u8>,
     pub schedule: Schedule,
     pub enabled: bool,
@@ -73,6 +74,7 @@ impl JobConfig {
     pub fn new(name: JobName, schedule: Schedule) -> Self {
         JobConfig {
             name,
+            check_interval_sec: 2, // checks every 5sec
             state: Default::default(),
             schedule,
             enabled: true,
