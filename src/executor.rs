@@ -109,19 +109,12 @@ impl State {
                 Ok(Some(Create()))
             }
             Create() => {
-                let job_config = ex.job_config.clone();
-                match ex
-                    .job_repo
-                    .get_job(job_config.name.clone().into())
-                    .await? {
-                    None => Ok({
-                       ex.job_repo
-                           .create_or_update_job(job_config.clone())
-                           .await?;
-                    }),
-                    Some(val) => Ok({ ex.job_repo.create_or_update_job(val.clone()).await?; }),
-                    Some(val) => Err({ ex.job_repo.create_or_update_job(val.clone()).await?; })
-                }.expect("TODO: panic message");
+                let mut job_config = ex.job_config.clone();
+                if let Some(jc) = ex.job_repo.get_job(job_config.name.clone().into()).await? {
+                    job_config.state = jc.state;
+                    job_config.last_run = jc.last_run
+                }
+                ex.job_repo.create_or_update_job(job_config.clone()).await?;
 
                 Ok(Some(Run()))
             }
@@ -132,7 +125,6 @@ impl State {
                 Ok(Some(Start()))
             }
         };
-
     }
 }
 
