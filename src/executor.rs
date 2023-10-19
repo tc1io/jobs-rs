@@ -89,13 +89,6 @@ impl State {
     pub fn init() -> State {
         Check()
     }
-    pub fn next(&mut self) -> State {
-        match self {
-            Check() => Create(),
-            Create() => Run(),
-            Run() => Create(),
-        }
-    }
     pub async fn execute<J: JobRepo + Sync + Send + Clone, L: LockRepo + Sync + Send + Clone>(
         &mut self,
         ex: &mut Executor<J, L>,
@@ -127,8 +120,6 @@ impl State {
                 let mut action = ex.action.lock().await;
 
                 let _xx = action.call(ex.job_name.clone().into(), Vec::new()).await?;
-                // }
-                sleep(Duration::from_secs(1));
                 Ok(Some(Check()))
             }
             _ => {
