@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::thread::sleep;
 // use std::time;
 use crate::error::Error::GeneralError;
-use crate::executor::State::{Check, Create, Run};
+use crate::executor::State::{Create, Run, Start, Timer};
 use std::time::{Duration, Instant};
 use tokio::select;
 use tokio::sync::oneshot::error::TryRecvError;
@@ -51,7 +51,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
         }
     }
     pub async fn run(&mut self) -> Option<State> {
-        Some(Check())
+        Some(Start())
         // dbg!("inside run");
         // let mut interval = time::interval(time::Duration::from_secs(
         //     self.job_config.clone().check_interval_sec,
@@ -80,22 +80,21 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum State {
-    Check(),
+    Start(),
     Create(),
     Run(),
 }
 
 impl State {
     pub fn init() -> State {
-        Check()
+        Start()
     }
     pub async fn execute<J: JobRepo + Sync + Send + Clone, L: LockRepo + Sync + Send + Clone>(
         &mut self,
         ex: &mut Executor<J, L>,
     ) -> Result<Option<State>, Error> {
         return match self {
-            Check() => {
-                dbg!("check.. returning create");
+            Start() => {
                 let mut interval = time::interval(time::Duration::from_secs(
                     ex.job_config.clone().check_interval_sec,
                 ));
@@ -112,7 +111,6 @@ impl State {
             Create() => {
                 let job_config = ex.job_config.clone();
                 let _ji = ex.job_repo.create_job(job_config).await?;
-                dbg!("create.. returning run");
                 Ok(Some(Run()))
             }
             Run() => {
@@ -120,11 +118,7 @@ impl State {
                 let mut action = ex.action.lock().await;
 
                 let _xx = action.call(ex.job_name.clone().into(), Vec::new()).await?;
-                Ok(Some(Check()))
-            }
-            _ => {
-                dbg!("empty.. returning");
-                Ok(None)
+                Ok(Some(Start()))
             }
         };
     }

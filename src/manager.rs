@@ -68,7 +68,6 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
                 let mut ex = Executor::new(name, action, schedule, j, l, rx);
                 let mut state = State::init();
                 loop {
-                    // while state == Empty() {
                     match state.execute(&mut ex).await {
                         Ok(maybe_state) => {
                             if maybe_state.map(|s| state = s).is_none() {
@@ -81,16 +80,8 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
                             break;
                         }
                     }
-                    // }
                 }
-
-                // if let Some(state) = maybe_state {
-                // } else {
-                // }
-                // state()
-                // };
             });
-            sleep(Duration::from_secs(2)).await;
         }
         Ok(())
     }
