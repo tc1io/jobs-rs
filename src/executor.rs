@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::thread::sleep;
 // use std::time;
 use crate::error::Error::GeneralError;
-use crate::executor::State::{Create, Run, Start, Timer};
+use crate::executor::State::{Create, Run, Start};
 use std::time::{Duration, Instant};
 use tokio::select;
 use tokio::sync::oneshot::error::TryRecvError;
@@ -16,7 +16,7 @@ use tokio::sync::{oneshot, Mutex};
 use tokio::time;
 use tokio::time::Timeout;
 use tokio_timer::Delay;
-
+use tokio_timer::Timer;
 // #[derive(Clone)]
 pub struct Executor<J, L>
 where
@@ -109,14 +109,18 @@ impl State {
                 Ok(Some(Create()))
             }
             Create() => {
-                let job_config = ex.job_config.clone();
-                let _ji = ex.job_repo.create_job(job_config).await?;
+                let mut job_config = ex.job_config.clone();
+                if let Some(jc) = ex.job_repo.get_job(job_config.name.clone().into()).await? {
+                    job_config.state = jc.state;
+                    job_config.last_run = jc.last_run
+                }
+                ex.job_repo.create_or_update_job(job_config.clone()).await?;
+
                 Ok(Some(Run()))
             }
             Run() => {
                 dbg!("run.. returning check");
                 let mut action = ex.action.lock().await;
-
                 let _xx = action.call(ex.job_name.clone().into(), Vec::new()).await?;
                 Ok(Some(Start()))
             }

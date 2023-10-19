@@ -52,6 +52,7 @@ async fn main() {
             expr: "* */2 * * * *".to_string(),
         },
     );
+
     let _ = manager.start_all().await.unwrap();
     sleep(Duration::from_secs(4)).await;
     manager.stop_by_name("project-puller".to_string()).await;

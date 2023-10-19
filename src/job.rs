@@ -1,3 +1,4 @@
+use std::println;
 use crate::error::Error;
 use crate::job::Status::{Registered, Running};
 use crate::lock::LockData;
@@ -67,7 +68,7 @@ pub struct JobConfig {
     pub schedule: Schedule,
     pub enabled: bool,
     pub last_run: i64,
-    // pub lock: LockData,
+    pub lock: LockData,
 }
 
 impl JobConfig {
@@ -79,7 +80,7 @@ impl JobConfig {
             schedule,
             enabled: true,
             last_run: Default::default(),
-            // lock: LockData {},
+            lock: LockData { expires: 0, version: 0 },
         }
     }
 }
@@ -203,7 +204,7 @@ impl Job {
 }
 #[async_trait]
 pub trait JobRepo {
-    async fn create_job(&mut self, job: JobConfig) -> Result<bool, Error>;
+    async fn create_or_update_job(&mut self, job: JobConfig) -> Result<bool, Error>;
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>, Error>;
     async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool, Error>;
 }
