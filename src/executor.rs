@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::thread::sleep;
 // use std::time;
 use crate::error::Error::GeneralError;
+use crate::executor::State::{Create, Run, Start, Timer};
 use std::time::{Duration, Instant};
 use tokio::select;
 use tokio::sync::oneshot::error::TryRecvError;
@@ -49,30 +50,77 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
             lock_repo,
         }
     }
-    pub async fn run(&mut self) -> Result<(), Error> {
-        dbg!("inside run");
-        let mut interval = time::interval(time::Duration::from_secs(
-            self.job_config.clone().check_interval_sec,
-        ));
-        loop {
-            match self.cancel_signal_rx.try_recv() {
-                Ok(_) => {
-                    dbg!("received stopped signal....", self.job_name.clone());
-                    return Ok(());
+    pub async fn run(&mut self) -> Option<State> {
+        Some(Start())
+        // dbg!("inside run");
+        // let mut interval = time::interval(time::Duration::from_secs(
+        //     self.job_config.clone().check_interval_sec,
+        // ));
+        // // loop {
+        // match self.cancel_signal_rx.try_recv() {
+        //     Ok(_) => {
+        //         dbg!("received stopped signal....", self.job_name.clone());
+        //         return Ok(None);
+        //     }
+        //     Err(e) => {}
+        // }
+        // interval.tick().await; // TODO: waits for timer.. should be a better solution
+        //
+        // let mut action = self.action.lock().await;
+        // let job_config = self.job_config.clone();
+        // let _ji = self.job_repo.create_job(job_config).await?;
+        //
+        // let _xx = action
+        //     .call(self.job_name.clone().into(), Vec::new())
+        //     .await?;
+        // // }
+        // Ok(None)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum State {
+    Start(),
+    Create(),
+    Run(),
+}
+
+impl State {
+    pub fn init() -> State {
+        Start()
+    }
+    pub async fn execute<J: JobRepo + Sync + Send + Clone, L: LockRepo + Sync + Send + Clone>(
+        &mut self,
+        ex: &mut Executor<J, L>,
+    ) -> Result<Option<State>, Error> {
+        return match self {
+            Start() => {
+                let mut interval = time::interval(time::Duration::from_secs(
+                    ex.job_config.clone().check_interval_sec,
+                ));
+                match ex.cancel_signal_rx.try_recv() {
+                    Ok(_) => {
+                        dbg!("received stopped signal....", ex.job_name.clone());
+                        return Ok(None);
+                    }
+                    Err(e) => {}
                 }
-                Err(e) => {}
+                interval.tick().await; // TODO: waits for timer.. should be a better solution
+                Ok(Some(Create()))
             }
-            interval.tick().await; // TODO: waits for timer.. should be a better solution
+            Create() => {
+                let job_config = ex.job_config.clone();
+                let _ji = ex.job_repo.create_job(job_config).await?;
+                Ok(Some(Run()))
+            }
+            Run() => {
+                dbg!("run.. returning check");
+                let mut action = ex.action.lock().await;
 
-            let mut action = self.action.lock().await;
-            let job_config = self.job_config.clone();
-            let _ji = self.job_repo.create_job(job_config).await?;
-
-            let _xx = action
-                .call(self.job_name.clone().into(), Vec::new())
-                .await?;
-        }
-        Ok(())
+                let _xx = action.call(ex.job_name.clone().into(), Vec::new()).await?;
+                Ok(Some(Start()))
+            }
+        };
     }
 }
 
