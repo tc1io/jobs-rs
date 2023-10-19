@@ -1,12 +1,10 @@
 use crate::error::Error;
+use crate::error::Error::GeneralError;
 use crate::executor::{Executor, State};
 use crate::job::Status::Running;
 use crate::job::{Job, JobAction, JobName, JobRepo, Schedule};
 use crate::lock::LockRepo;
-use std::time::Duration;
 use tokio::sync::oneshot;
-use tokio::time::sleep;
-use tokio_retry::Action;
 
 pub struct JobManager<J, L>
 where
@@ -28,17 +26,6 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             jobs: Vec::new(),
         }
     }
-    // pub async fn register(&mut self, name: String, job_action: impl JobAction + 'static + std::marker::Send + std::marker::Sync) {
-    //     self.executors.insert(
-    //         JobName(name.to_string()),
-    //         Executor::new(
-    //             name.into(),
-    //             self.job_repo.clone(),
-    //             self.lock_repo.clone(),
-    //             job_action,
-    //         )
-    //     );
-    // }
     pub fn register(
         &mut self,
         name: String,
@@ -50,14 +37,14 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
     }
 
     pub async fn start_all(&mut self) -> Result<(), Error> {
-        let mut job_repo = self.job_repo.clone();
+        let job_repo = self.job_repo.clone();
         let lock_repo = self.lock_repo.clone();
         for job in self
             .jobs
             .iter_mut()
             .filter(|j| Job::get_registered_or_running(&j.status))
         {
-            let (tx, mut rx) = oneshot::channel();
+            let (tx, rx) = oneshot::channel();
             job.status = Running(tx);
             let name = job.name.clone();
             let action = job.action.clone();
@@ -94,7 +81,9 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             return match job.status {
                 Running(s) => {
                     dbg!("sending the stop signal now....");
-                    s.send(());
+                    let _ = s.send(()).map_err(|()| GeneralError {
+                        description: String::from("send cancel signal failed"),
+                    });
                     Ok(())
                 }
                 _ => Ok(()),

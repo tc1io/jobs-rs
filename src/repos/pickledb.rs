@@ -1,8 +1,7 @@
 use crate::error::Error;
-use crate::job::{Job, JobConfig, JobName, JobRepo};
+use crate::job::{JobConfig, JobName, JobRepo};
 use crate::lock::{LockData, LockRepo};
 use async_trait::async_trait;
-use chrono::Utc;
 use pickledb::PickleDb;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -30,7 +29,7 @@ impl JobRepo for Repo {
             .set(job.name.as_ref(), &job)
             .map(|_| Ok(true)) // TODO
             .map_err(|e| Error::GeneralError {
-                description: "job creation failed".to_string(),
+                description: e.to_string(),
             })?
     }
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>, Error> {
@@ -47,7 +46,7 @@ impl JobRepo for Repo {
             .write()
             .await
             // .map_err(|e| JobError::DatabaseError(e.to_string()))?
-            .set((name1.as_ref()), &job)
+            .set(name1.as_ref(), &job)
             .unwrap();
         println!("state saved");
         Ok(true)
@@ -56,7 +55,7 @@ impl JobRepo for Repo {
 
 #[async_trait]
 impl LockRepo for Repo {
-    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, Error> {
+    async fn acquire_lock(&mut self, _lock_data: LockData) -> Result<bool, Error> {
         // println!("acquire lock");
         // let mut acquire = false;
         // TODO: try functional approach
