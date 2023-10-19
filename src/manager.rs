@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::executor::Executor;
+use crate::executor::{Executor, State};
 use crate::job::Status::Running;
 use crate::job::{Job, JobAction, JobName, JobRepo, Schedule};
 use crate::lock::LockRepo;
@@ -66,9 +66,22 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             let l = lock_repo.clone();
             tokio::spawn(async move {
                 let mut ex = Executor::new(name, action, schedule, j, l, rx);
-                ex.run().await;
+                let mut state = State::init();
+                loop {
+                    match state.execute(&mut ex).await {
+                        Ok(maybe_state) => {
+                            if maybe_state.map(|s| state = s).is_none() {
+                                println!("empty state. Aborting job!!");
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            println!("error: {:?}. Aborting job", e);
+                            break;
+                        }
+                    }
+                }
             });
-            sleep(Duration::from_secs(2)).await;
         }
         Ok(())
     }

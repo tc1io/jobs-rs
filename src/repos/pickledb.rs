@@ -22,7 +22,7 @@ impl Repo {
 
 #[async_trait]
 impl JobRepo for Repo {
-    async fn create_job(&mut self, job: JobConfig) -> Result<bool, Error> {
+    async fn create_or_update_job(&mut self, job: JobConfig) -> Result<bool, Error> {
         dbg!("create job");
         self.db
             .write()
