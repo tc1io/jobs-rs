@@ -33,17 +33,6 @@ impl JobRepo for Repo {
                 description: "job creation failed".to_string(),
             })?
     }
-    async fn update_job(&mut self, job: JobConfig) -> Result<bool, Error> {
-        dbg!("Update job");
-        self.db
-            .write()
-            .await
-            .dump()
-            .map(|_| Ok(true))
-            .map_err(|e| Error::GeneralError {
-                description: "job creation failed".to_string(),
-            })?
-    }
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>, Error> {
         Ok(self.db.write().await.get::<JobConfig>(name.as_ref()))
     }
