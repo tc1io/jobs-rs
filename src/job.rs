@@ -1,5 +1,4 @@
 use crate::job::Status::{Registered, Running};
-use crate::lock::LockData;
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -55,7 +54,7 @@ pub struct JobConfig {
     pub schedule: Schedule,
     pub enabled: bool,
     pub last_run: u16,
-    pub lock: LockData,
+    // pub lock: LockData,
 }
 
 impl JobConfig {
@@ -67,7 +66,7 @@ impl JobConfig {
             schedule,
             enabled: true,
             last_run: Default::default(),
-            lock: LockData::default(),
+            // lock: LockData::default(),
         }
     }
     pub fn run_job_now(self) -> Result<bool> {

@@ -1,7 +1,7 @@
 use crate::executor::State::{Create, Run, Start};
 use crate::job::Schedule;
 use crate::job::{JobAction, JobConfig, JobName, JobRepo};
-use crate::lock::LockRepo;
+use crate::lock::{LockData, LockRepo};
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::oneshot::Receiver;
@@ -18,6 +18,7 @@ where
     cancel_signal_rx: Receiver<()>,
     job_repo: J,
     lock_repo: L,
+    lock_data: LockData,
 }
 
 impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Executor<J, L> {
@@ -36,6 +37,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
             cancel_signal_rx,
             job_repo,
             lock_repo,
+            lock_data: LockData::default(),
         }
     }
 }
@@ -79,39 +81,32 @@ impl State {
                 Ok(Some(Run()))
             }
             Run() => {
-                dbg!("run.. returning check");
-                let mut job_config = ex.job_config.clone();
-                let name = job_config.clone().name;
-                let acquire_lock = ex.lock_repo.acquire_lock(job_config.clone()).await?;
+                let job_config = ex.job_config.clone();
                 if job_config.clone().run_job_now()? {
-                    if acquire_lock {
-                        let refresh_lock_fut = ex.lock_repo.refresh_lock(job_config.clone());
+                    let name = job_config.clone().name;
+                    if ex
+                        .lock_repo
+                        .acquire_lock(name.clone(), ex.lock_data.clone())
+                        .await?
+                    {
+                        let refresh_lock_fut = ex.lock_repo.refresh_lock(name.clone());
                         let mut action = ex.action.lock().await;
                         let job_fut = action.call(ex.job_name.clone().into(), Vec::new());
-                        let f = tokio::select! {
+                        let _f = tokio::select! {
                                 refreshed = refresh_lock_fut => {
-                                    match refreshed {
-                                        Ok(x) => Ok(x),
-                                        Err(e) => Err(e),
-                                        }
+                                match refreshed {
+                                    Ok(x) => Ok(x),
+                                    Err(e) => Err(e),
                                     }
+                                }
                                 state = job_fut => {
                                 match state {
                                     Ok(s) => {
-                                        ex.job_repo.save_state(name, s).await;
+                                        let _x = ex.job_repo.save_state(name, s).await;
                                         Ok(true)
                                     }
                                     Err(e) => Err(e),
                                 }
-                            //         bar = xx => {
-                            //             match bar {
-                            //            Ok(state) => {
-                            //             self.job_repo.save_state(name.as_str(), state).await;
-                            //             Ok(true)
-                            //             }
-                            //         Err(e) => Err(JobError::DatabaseError(e.to_string())),
-                            //     }
-                            //     }
                             }
                         };
                     }

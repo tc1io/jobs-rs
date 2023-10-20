@@ -1,14 +1,12 @@
-use std::ops::Add;
 use crate::job::{JobConfig, JobName, JobRepo};
 use crate::lock::{LockData, LockRepo};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use pickledb::PickleDb;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::RwLock;
 use chrono::Utc;
-use tokio::time::{interval, sleep};
+use pickledb::PickleDb;
+use std::ops::Add;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct Repo {
@@ -55,79 +53,83 @@ impl JobRepo for Repo {
 
 #[async_trait]
 impl LockRepo for Repo {
-
-    async fn acquire_lock(&mut self, jc: JobConfig) -> Result<bool> {
+    async fn acquire_lock(&mut self, name: JobName, lock_data: LockData) -> Result<bool> {
         println!("acquire lock");
-        let mut acquire = false;
 
-        // TODO: try functional approach
-        let existing_lock = self
+        if self
             .db
             .read()
             .await
-            .get::<JobConfig>(jc.name.as_ref());
-
-        match existing_lock {
-            Some(lock) => {
-                if lock.lock.expires < Utc::now().timestamp_millis() {
-                    acquire = true;
-                }
-            }
-            None => acquire = true,
-        }
-        if acquire {
-            self.db
+            .get::<LockData>(name.0.as_str())
+            .map_or_else(|| true, |data| data.expires < Utc::now().timestamp_millis())
+        {
+            return self
+                .db
                 .write()
                 .await
-                .set(jc.name.as_ref(), &jc)
+                .set(name.0.as_str(), &lock_data)
                 .map(|_| Ok(true))
-                .map_err(|e| anyhow!(e.to_string()))?
-        } else {
-            Ok(false)
+                .map_err(|e| anyhow!(e.to_string()))?;
         }
+        Ok(false)
     }
-    async fn refresh_lock(&mut self, jc: JobConfig) -> Result<bool> {
+    async fn refresh_lock(&mut self, name: JobName) -> Result<bool> {
         // let mut refresh_interval = interval(Duration::from_secs(jc.lock.ttl.as_secs() / 2));
         loop {
             // refresh_interval.tick().await;
-            println!("refreshing lock");
-            let existing_lock = self
+
+            let mut lock_data = self
                 .db
                 .read()
                 .await
-                .get::<JobConfig>(jc.name.as_ref());
-            match existing_lock {
-                // match existing_lock {
-                Some(mut lock) => {
-                    dbg!("some");
-                    if lock.lock.expires < Utc::now().timestamp_millis() {
-                        println!("lock expired. unable to refresh. Try again");
-                        // Err(JobError::LockError(
-                        //     format!("lock expired. unable to refresh").to_string(),
-                        // ))
-                        // Ok(false)
-                    } else {
-                        dbg!("some else");
-                        lock.lock.expires = Utc::now()
-                            .timestamp_millis()
-                            .add(lock.lock.ttl.as_millis() as i64);
-                        lock.lock.version = lock.lock.version.add(1);
-                        dbg!(lock.name.0.as_str());
-                        self.db
-                            .write()
-                            .await
-                            .set(lock.name.0.as_str(), &lock)
-                            .map_err(|e| anyhow!(e.to_string()))?;
-                        println!("lock refreshed");
+                .get::<LockData>(name.as_ref())
+                .ok_or(anyhow!("lock not found or lock expired"))?;
 
-                    }
-                }
-                None => {
-                    println!("lock not found. unable to refresh. Try again");
-                }
-            };
-            dbg!("here");
-            sleep(Duration::from_secs(jc.lock.ttl.as_secs() / 2)).await;
+            if lock_data.expires < Utc::now().timestamp_millis() {
+                return Err(anyhow!("lock expired"));
+            } else {
+                lock_data.expires = Utc::now()
+                    .timestamp_millis()
+                    .add(lock_data.ttl.as_millis() as i64);
+                lock_data.version = lock_data.version.add(1);
+                self.db
+                    .write()
+                    .await
+                    .set(name.0.as_str(), &lock_data)
+                    .map_err(|e| anyhow!(e.to_string()))?;
+                println!("lock refreshed");
+            }
+
+            // println!("refreshing lock");
+            // match self.db.read().await.get::<LockData>(name.as_ref()) {
+            //     Some(mut lock) => {
+            //         dbg!("some");
+            //         if lock.lock.expires < Utc::now().timestamp_millis() {
+            //             println!("lock expired. unable to refresh. Try again");
+            //             // Err(JobError::LockError(
+            //             //     format!("lock expired. unable to refresh").to_string(),
+            //             // ))
+            //             // Ok(false)
+            //         } else {
+            //             dbg!("some else");
+            //             lock.lock.expires = Utc::now()
+            //                 .timestamp_millis()
+            //                 .add(lock.lock.ttl.as_millis() as i64);
+            //             lock.lock.version = lock.lock.version.add(1);
+            //             dbg!(lock.name.0.as_str());
+            //             self.db
+            //                 .write()
+            //                 .await
+            //                 .set(lock.name.0.as_str(), &lock)
+            //                 .map_err(|e| anyhow!(e.to_string()))?;
+            //             println!("lock refreshed");
+            //         }
+            //     }
+            //     None => {
+            //         println!("lock not found. unable to refresh. Try again");
+            //     }
         }
+        // dbg!("here");
+        // sleep(Duration::from_secs(jc.lock.ttl.as_secs() / 2)).await;
     }
 }
