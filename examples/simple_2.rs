@@ -1,10 +1,7 @@
-
 use async_trait::async_trait;
 use jobs::job::{Job, JobConfig, JobName, Schedule};
-use jobs::{
-     job::JobAction, job::JobRepo, lock::LockRepo, manager::JobManager, repos,
-};
 use jobs::repos::pickledb::Repo;
+use jobs::{job::JobAction, job::JobRepo, lock::LockRepo, manager::JobManager, repos};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -55,7 +52,6 @@ async fn main() {
 
 #[derive(Clone)]
 struct JobImplementer {}
-
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct Project {
