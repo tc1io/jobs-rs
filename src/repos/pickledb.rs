@@ -27,7 +27,7 @@ impl JobRepo for Repo {
             .write()
             .await
             .set(job.name.as_ref(), &job)
-            .map(|_| Ok(true)) // TODO
+            .map(|_| Ok(true))
             .map_err(|e| anyhow!(e.to_string()))?
     }
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>> {
@@ -43,7 +43,6 @@ impl JobRepo for Repo {
         self.db
             .write()
             .await
-            // .map_err(|e| JobError::DatabaseError(e.to_string()))?
             .set(name1.as_ref(), &job)
             .map_err(|e| anyhow!(e.to_string()))?;
         println!("state saved");

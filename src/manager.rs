@@ -80,9 +80,9 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             return match job.status {
                 Running(s) => {
                     dbg!("sending the stop signal now....");
-                    let xx = s
+                    let _xx = s
                         .send(())
-                        .map_err(|e| anyhow!("send cancel signal failed"))?;
+                        .map_err(|()| anyhow!("send cancel signal failed"))?;
                     Ok(())
                 }
                 _ => Ok(()),
