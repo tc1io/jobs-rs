@@ -77,14 +77,27 @@ impl State {
                     job_config.last_run = jc.last_run
                 }
                 ex.job_repo.create_or_update_job(job_config.clone()).await?;
-
                 Ok(Some(Run()))
             }
             Run() => {
                 dbg!("run.. returning check");
-                let mut action = ex.action.lock().await;
-                let _xx = action.call(ex.job_name.clone().into(), Vec::new()).await?;
-                Ok(Some(Start()))
+                let mut job_config = ex.job_config.clone();
+                let acquire_lock = ex.lock_repo.acquire_lock(job_config.clone()).await?;
+                if acquire_lock {
+                    let refresh_lock = ex.lock_repo.refresh_lock(job_config);
+                    let mut action = ex.action.lock().await;
+                    let xx = action.call(ex.job_name.clone().into(), Vec::new());
+                    let f = tokio::select! {
+                        refreshed = refresh_lock => {
+                            // dbg!(refreshed);
+                          todo!()
+                        }
+                        bar = xx => {
+                            ex.job_repo.save_state(job_config.name.into(), job_config.state).await;
+                            todo!()
+                                }
+                    };
+                }
             }
         };
     }

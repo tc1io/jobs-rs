@@ -1,10 +1,7 @@
 use jobs::job::{Job, JobConfig, JobName, JobRepo, Schedule};
-use jobs::{
-   repos,
-};
-use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use jobs::lock::{LockData, LockRepo};
-
+use jobs::repos;
+use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 
 #[tokio::main]
 async fn main() {
@@ -34,12 +31,9 @@ async fn main() {
             ttl: Default::default(),
         },
     })
-        .await
-        .unwrap();
+    .await?;
 
-    repo.save_state(job_name, vec![])
-        .await
-        .unwrap();
+    repo.save_state(job_name, vec![]).await?;
 
     // match repo
     //     .get_job(job_name1.into())
@@ -52,8 +46,7 @@ async fn main() {
     //     }
     // }
 
-    repo.acquire_lock(JobConfig {
-
+    repo.refresh_lock(JobConfig {
         name: job_name1.into(),
         check_interval_sec: 0,
         state: vec![],
@@ -67,9 +60,6 @@ async fn main() {
             version: 0,
             ttl: Default::default(),
         },
-        // lock_ttl: (),
     })
-        .await.unwrap();
+    .await?;
 }
-
-

@@ -1,19 +1,10 @@
-use std::sync::Arc;
-use async_trait::async_trait;
 
-use chrono::{TimeZone, Utc};
-use futures::{FutureExt, TryFutureExt};
+use async_trait::async_trait;
 use jobs::job::{Job, JobConfig, JobName, Schedule};
 use jobs::{
      job::JobAction, job::JobRepo, lock::LockRepo, manager::JobManager, repos,
 };
-
-use jobs::lock::LockData;
-
-// use jobs::job::Schedule;
-
 use jobs::repos::pickledb::Repo;
-// use jobs::{job::JobAction, manager::JobManager, repos};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
