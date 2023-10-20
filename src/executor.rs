@@ -80,8 +80,11 @@ impl State {
                 Ok(Some(Run()))
             }
             Run() => {
-                let mut action = ex.action.lock().await;
-                let _xx = action.call(ex.job_name.clone().into(), Vec::new()).await?;
+                let job_config = ex.job_config.clone();
+                if job_config.run_job_now()? {
+                    let mut action = ex.action.lock().await;
+                    let _xx = action.call(ex.job_name.clone().into(), Vec::new()).await?;
+                }
                 Ok(Some(Start()))
             }
         };

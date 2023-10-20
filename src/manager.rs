@@ -33,27 +33,26 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         schedule: Schedule,
     ) {
         self.jobs
-            .push(Job::new(JobName(name.clone().into()), action, schedule));
+            .push(Job::new(JobName(name.clone().into()), action, schedule)); // TODO: add validation during registration??
         info!("job: {:?} registered", name);
     }
 
     pub async fn start_all(&mut self) -> Result<()> {
-        let job_repo = self.job_repo.clone();
-        let lock_repo = self.lock_repo.clone();
         for job in self
             .jobs
             .iter_mut()
             .filter(|j| Job::get_registered_or_running(&j.status))
         {
             let (tx, rx) = oneshot::channel();
-            job.status = Running(tx);
+            let job_repo = self.job_repo.clone();
+            let lock_repo = self.lock_repo.clone();
             let name = job.name.clone();
             let action = job.action.clone();
             let schedule = job.schedule.clone();
-            let j = job_repo.clone();
-            let l = lock_repo.clone();
+
+            job.status = Running(tx);
             tokio::spawn(async move {
-                let mut ex = Executor::new(name.clone(), action, schedule, j, l, rx);
+                let mut ex = Executor::new(name.clone(), action, schedule, job_repo, lock_repo, rx);
                 let mut state = State::init();
                 loop {
                     match state.execute(&mut ex).await {
