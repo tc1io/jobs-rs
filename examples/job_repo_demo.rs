@@ -17,7 +17,7 @@ async fn main() {
     let job_name = JobName("test".to_string());
     let job_name1 = job_name.clone();
 
-    repo.create_job(JobConfig {
+    repo.create_or_update_job(JobConfig {
         // name: JobName { name: "dummy".to_string() },
         name: job_name.clone(),
         check_interval_sec: 0,
@@ -31,6 +31,7 @@ async fn main() {
             expires: 0,
             version: 0,
             // lock_ttl: (),
+            ttl: Default::default(),
         },
     })
         .await
@@ -64,6 +65,7 @@ async fn main() {
         lock: LockData {
             expires: 0,
             version: 0,
+            ttl: Default::default(),
         },
         // lock_ttl: (),
     })

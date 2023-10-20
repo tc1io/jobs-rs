@@ -38,13 +38,13 @@ async fn main() {
     };
 
     let mut manager = JobManager::<Repo, Repo>::new(db_repo, lock_repo);
-    manager.register(
-        String::from("project-updater"),
-        job1,
-        Schedule {
-            expr: "* */3 * * * *".to_string(),
-        },
-    );
+    // manager.register(
+    //     String::from("project-updater"),
+    //     job1,
+    //     Schedule {
+    //         expr: "* */3 * * * *".to_string(),
+    //     },
+    // );
     manager.register(
         String::from("project-puller"),
         job2,
@@ -52,6 +52,7 @@ async fn main() {
             expr: "* */2 * * * *".to_string(),
         },
     );
+
     let _ = manager.start_all().await.unwrap();
     sleep(Duration::from_secs(4)).await;
     manager.stop_by_name("project-puller".to_string()).await;

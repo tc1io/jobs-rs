@@ -1,9 +1,10 @@
 use crate::error::Error;
 use async_trait::async_trait;
-use chrono::{Duration, Utc};
+// use chrono::u;
 use serde::{Deserialize, Serialize};
 use std::{dbg, format, println};
 use std::thread::sleep;
+use std::time::Duration;
 use tokio::time::interval;
 use crate::job::JobConfig;
 
@@ -11,7 +12,7 @@ use crate::job::JobConfig;
 pub struct LockData {
     pub expires: i64,
     pub version: i8,
-    // pub ttl: Duration,
+    pub ttl: Duration,
 }
 #[async_trait]
 pub trait LockRepo {
@@ -19,6 +20,7 @@ pub trait LockRepo {
     // async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, Error>;
 
     async fn acquire_lock(&mut self, jc: JobConfig) -> Result<bool,Error >;
+    // async fn refresh_lock(&mut self, lock_data: JobConfig) -> Result<bool, Error>;
     // async fn refresh_lock(&mut self, lock_data: JobConfig) -> Result<bool, Error>;
     // async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
 }

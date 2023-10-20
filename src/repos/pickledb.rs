@@ -26,7 +26,7 @@ impl Repo {
 
 #[async_trait]
 impl JobRepo for Repo {
-    async fn create_job(&mut self, job: JobConfig) -> Result<bool, Error> {
+    async fn create_or_update_job(&mut self, job: JobConfig) -> Result<bool, Error> {
         dbg!("create job");
         self.db
             .write()
@@ -40,7 +40,6 @@ impl JobRepo for Repo {
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>, Error> {
         Ok(self.db.write().await.get::<JobConfig>(name.as_ref()))
     }
-
     async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool, Error> {
         let name1 = name.clone();
         let mut job = self.get_job(name.into()).await.unwrap().unwrap();
@@ -51,11 +50,11 @@ impl JobRepo for Repo {
         self.db
             .write()
             .await
-            // .map_err(|e| JobError::DatabaseError(e.to_string()))?
             .set((name1.as_ref()), &job)
-            .unwrap();
-        println!("state saved");
-        Ok(true)
+            .map(|_| Ok(true))
+            .map_err(|e| Error::GeneralError {
+                description: "job creation failed".to_string(),
+            })?
     }
 }
 
@@ -71,10 +70,9 @@ impl LockRepo for Repo {
             .read()
             .await
             .get::<JobConfig>(job.name.as_ref());
-        // .unwrap();
-        // .map_err(|e| JobError::DatabaseError(e.to_string()))?
+            // .ok_or(Error::GeneralError { description: "".to_string() })
 
-        match existing_lock {
+        match existing_lock{
             Some(lock) => {
                 if lock.lock.expires < Utc::now().timestamp_millis() {
                     acquire = true;
@@ -103,8 +101,7 @@ impl LockRepo for Repo {
     //             .db
     //             .read()
     //             .await
-    //             // .map_err(|e| JobError::DatabaseError(e.to_string()))?
-    //             .get::<JobConfig>(lock_data.job_name.as_str());
+    //             .get::<JobConfig>(lock_data.name.as_str());
     //         match existing_lock {
     //             // match existing_lock {
     //             Some(mut lock) => {
@@ -121,7 +118,7 @@ impl LockRepo for Repo {
     //                         .timestamp_millis()
     //                         .add(lock.lock.ttl.as_millis() as i64);
     //                     lock.version = lock.lock.version.add(1);
-    //                     dbg!(lock.job_name.as_str());
+    //                     dbg!(lock.name.as_str());
     //                     self.db
     //                         .write()
     //                         .await
@@ -153,7 +150,7 @@ impl LockRepo for Repo {
     //             }
     //         }?;
     //         dbg!("here");
-    //         sleep(Duration::from_secs(lock_data.ttl.as_secs() / 2)).await;
+    //         sleep(Duration::from_secs(lock_data.lock.ttl / 2)).await;
     //     }
     // }
 }
