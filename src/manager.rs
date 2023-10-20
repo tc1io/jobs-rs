@@ -6,6 +6,7 @@ use anyhow::{anyhow, Result};
 use log::{info, warn};
 use tokio::sync::oneshot;
 
+/// JobManager holds the job + lock repo along with the list of jobs
 pub struct JobManager<J, L>
 where
     J: JobRepo + Sync + Send + Clone,
@@ -26,6 +27,16 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             jobs: Vec::new(),
         }
     }
+    /// register will add the job to the vector of jobs in JobManager
+    /// ```rust,ignore
+    ///     let mut manager = JobManager::<Repo, Repo>::new(db_repo, lock_repo);
+    ///     manager.register(
+    ///         String::from("project-updater"),
+    ///         job.clone(),
+    ///         Schedule {
+    ///             expr: "* */3 * * * *".to_string(),
+    ///        },
+    ///     );
     pub fn register(
         &mut self,
         name: String,
@@ -37,6 +48,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         info!("job: {:?} registered", name);
     }
 
+    /// start_all will spawn the jobs and run the job for ever until the job is stopped or aborted
     pub async fn start_all(&mut self) -> Result<()> {
         for job in self
             .jobs
@@ -79,6 +91,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         }
         Ok(())
     }
+    /// stop_by_name will stop the job which is started as part of start_all
     pub async fn stop_by_name(self, name: String) -> Result<()> {
         for job in self
             .jobs
