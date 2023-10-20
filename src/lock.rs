@@ -1,17 +1,23 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+// use chrono::u;
+use crate::job::JobConfig;
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use std::thread::sleep;
+use std::time::Duration;
+use std::{dbg, format, println};
+use tokio::time::interval;
+
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct LockData {
     pub expires: i64,
     pub version: i8,
-    // pub lock_ttl: Duration,
+    pub ttl: Duration,
 }
 #[async_trait]
 pub trait LockRepo {
-    // async fn refresh_lock(&mut self, lock_data: LockData) -> Result<bool, JobError>;
-    // async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool, Error>;
-
-    async fn acquire_lock(&mut self, lock_data: LockData) -> Result<bool>;
+    async fn acquire_lock(&mut self, jc: JobConfig) -> Result<bool>;
+    async fn refresh_lock(&mut self, lock_data: JobConfig) -> Result<bool>;
 }

@@ -76,14 +76,45 @@ impl State {
                     job_config.last_run = jc.last_run
                 }
                 ex.job_repo.create_or_update_job(job_config.clone()).await?;
-
                 Ok(Some(Run()))
             }
             Run() => {
-                let job_config = ex.job_config.clone();
-                if job_config.run_job_now()? {
-                    let mut action = ex.action.lock().await;
-                    let _xx = action.call(ex.job_name.clone().into(), Vec::new()).await?;
+                dbg!("run.. returning check");
+                let mut job_config = ex.job_config.clone();
+                let name = job_config.clone().name;
+                let acquire_lock = ex.lock_repo.acquire_lock(job_config.clone()).await?;
+                if job_config.clone().run_job_now()? {
+                    if acquire_lock {
+                        let refresh_lock_fut = ex.lock_repo.refresh_lock(job_config.clone());
+                        let mut action = ex.action.lock().await;
+                        let job_fut = action.call(ex.job_name.clone().into(), Vec::new());
+                        let f = tokio::select! {
+                                refreshed = refresh_lock_fut => {
+                                    match refreshed {
+                                        Ok(x) => Ok(x),
+                                        Err(e) => Err(e),
+                                        }
+                                    }
+                                state = job_fut => {
+                                match state {
+                                    Ok(s) => {
+                                        ex.job_repo.save_state(name, s).await;
+                                        Ok(true)
+                                    }
+                                    Err(e) => Err(e),
+                                }
+                            //         bar = xx => {
+                            //             match bar {
+                            //            Ok(state) => {
+                            //             self.job_repo.save_state(name.as_str(), state).await;
+                            //             Ok(true)
+                            //             }
+                            //         Err(e) => Err(JobError::DatabaseError(e.to_string())),
+                            //     }
+                            //     }
+                            }
+                        };
+                    }
                 }
                 Ok(Some(Start()))
             }

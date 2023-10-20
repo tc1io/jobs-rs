@@ -1,9 +1,10 @@
 use async_trait::async_trait;
-use jobs::job::Schedule;
+use jobs::job::{Job, JobConfig, JobName, Schedule};
 use jobs::repos::pickledb::Repo;
-use jobs::{job::JobAction, manager::JobManager, repos};
+use jobs::{job::JobAction, job::JobRepo, lock::LockRepo, manager::JobManager, repos};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 use tokio::time::{sleep, Duration};
 
 #[tokio::main]
