@@ -1,6 +1,6 @@
-use crate::error::Error;
 use crate::job::Status::{Registered, Running};
 use crate::lock::LockData;
+use anyhow::Result;
 use async_trait::async_trait;
 use derive_more::Into;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait JobAction {
-    async fn call(&mut self, name: String, state: Vec<u8>) -> Result<Vec<u8>, Error>;
+    async fn call(&mut self, name: String, state: Vec<u8>) -> Result<Vec<u8>>;
 }
 
 #[derive(Default, Clone, Into, Eq, Hash, PartialEq, Debug, Serialize, Deserialize)]
@@ -78,10 +78,10 @@ impl Job {
             name: JobName(name.into()),
             action: Arc::new(Mutex::new(action)),
             schedule,
-            status: Status::Registered,
+            status: Registered,
         }
     }
-    pub fn should_run_now(self) -> Result<bool, Error> {
+    pub fn should_run_now(self) -> Result<bool> {
         // if !self.enabled {
         //     return Ok(false);
         // }
@@ -131,7 +131,7 @@ impl Job {
 }
 #[async_trait]
 pub trait JobRepo {
-    async fn create_or_update_job(&mut self, job: JobConfig) -> Result<bool, Error>;
-    async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>, Error>;
-    async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool, Error>;
+    async fn create_or_update_job(&mut self, job: JobConfig) -> Result<bool>;
+    async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>>;
+    async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool>;
 }

@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 use jobs::job::Schedule;
-use jobs::{error::Error, job::JobAction, manager::JobManager, repos};
-
 use jobs::repos::pickledb::Repo;
+use jobs::{job::JobAction, manager::JobManager, repos};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use tokio::time::{sleep, Duration};
@@ -62,7 +61,7 @@ struct Project {
 
 #[async_trait]
 impl JobAction for JobImplementer {
-    async fn call(&mut self, name: String, _state: Vec<u8>) -> Result<Vec<u8>, Error> {
+    async fn call(&mut self, name: String, _state: Vec<u8>) -> anyhow::Result<Vec<u8>> {
         dbg!(name);
         let state = Vec::new();
         Ok(state)

@@ -1,8 +1,8 @@
-use crate::error::Error;
 use crate::executor::State::{Create, Run, Start};
 use crate::job::Schedule;
 use crate::job::{JobAction, JobConfig, JobName, JobRepo};
 use crate::lock::LockRepo;
+use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::oneshot::Receiver;
 use tokio::sync::Mutex;
@@ -12,7 +12,6 @@ where
     J: JobRepo + Sync + Send + Clone,
     L: LockRepo + Sync + Send + Clone,
 {
-    // pub job: Job,
     job_name: JobName,
     action: Arc<Mutex<dyn JobAction + Send + Sync>>,
     job_config: JobConfig,
@@ -55,7 +54,7 @@ impl State {
     pub async fn execute<J: JobRepo + Sync + Send + Clone, L: LockRepo + Sync + Send + Clone>(
         &mut self,
         ex: &mut Executor<J, L>,
-    ) -> Result<Option<State>, Error> {
+    ) -> Result<Option<State>> {
         return match self {
             Start() => {
                 let mut interval = time::interval(time::Duration::from_secs(

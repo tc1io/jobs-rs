@@ -1,9 +1,8 @@
-use crate::error::Error;
-use crate::error::Error::GeneralError;
 use crate::executor::{Executor, State};
 use crate::job::Status::Running;
 use crate::job::{Job, JobAction, JobName, JobRepo, Schedule};
 use crate::lock::LockRepo;
+use anyhow::{anyhow, Result};
 use tokio::sync::oneshot;
 
 pub struct JobManager<J, L>
@@ -36,7 +35,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             .push(Job::new(JobName(name.clone().into()), action, schedule));
     }
 
-    pub async fn start_all(&mut self) -> Result<(), Error> {
+    pub async fn start_all(&mut self) -> Result<()> {
         let job_repo = self.job_repo.clone();
         let lock_repo = self.lock_repo.clone();
         for job in self
@@ -72,7 +71,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         }
         Ok(())
     }
-    pub async fn stop_by_name(self, name: String) -> Result<(), Error> {
+    pub async fn stop_by_name(self, name: String) -> Result<()> {
         for job in self
             .jobs
             .into_iter()
@@ -81,9 +80,9 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             return match job.status {
                 Running(s) => {
                     dbg!("sending the stop signal now....");
-                    let _ = s.send(()).map_err(|()| GeneralError {
-                        description: String::from("send cancel signal failed"),
-                    });
+                    let xx = s
+                        .send(())
+                        .map_err(|e| anyhow!("send cancel signal failed"))?;
                     Ok(())
                 }
                 _ => Ok(()),

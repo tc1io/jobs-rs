@@ -1,4 +1,4 @@
-#[derive(Debug)]
-pub enum Error {
-    GeneralError { description: String },
-}
+// #[derive(Debug)]
+// pub enum Error {
+//     GeneralError { description: String },
+// }
