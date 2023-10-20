@@ -25,7 +25,7 @@ Cargo.lock
 .vscode
 .DS_Store
 
-example.db
+example.db*
 project.db
 lock.db
 /.idea/

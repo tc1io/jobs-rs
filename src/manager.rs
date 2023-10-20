@@ -1,12 +1,9 @@
-use crate::error::Error;
 use crate::executor::{Executor, State};
 use crate::job::Status::Running;
 use crate::job::{Job, JobAction, JobName, JobRepo, Schedule};
 use crate::lock::LockRepo;
-use std::time::Duration;
+use anyhow::{anyhow, Result};
 use tokio::sync::oneshot;
-use tokio::time::sleep;
-use tokio_retry::Action;
 
 pub struct JobManager<J, L>
 where
@@ -28,17 +25,6 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             jobs: Vec::new(),
         }
     }
-    // pub async fn register(&mut self, name: String, job_action: impl JobAction + 'static + std::marker::Send + std::marker::Sync) {
-    //     self.executors.insert(
-    //         JobName(name.to_string()),
-    //         Executor::new(
-    //             name.into(),
-    //             self.job_repo.clone(),
-    //             self.lock_repo.clone(),
-    //             job_action,
-    //         )
-    //     );
-    // }
     pub fn register(
         &mut self,
         name: String,
@@ -49,15 +35,15 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             .push(Job::new(JobName(name.clone().into()), action, schedule));
     }
 
-    pub async fn start_all(&mut self) -> Result<(), Error> {
-        let mut job_repo = self.job_repo.clone();
+    pub async fn start_all(&mut self) -> Result<()> {
+        let job_repo = self.job_repo.clone();
         let lock_repo = self.lock_repo.clone();
         for job in self
             .jobs
             .iter_mut()
             .filter(|j| Job::get_registered_or_running(&j.status))
         {
-            let (tx, mut rx) = oneshot::channel();
+            let (tx, rx) = oneshot::channel();
             job.status = Running(tx);
             let name = job.name.clone();
             let action = job.action.clone();
@@ -85,7 +71,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         }
         Ok(())
     }
-    pub async fn stop_by_name(self, name: String) -> Result<(), Error> {
+    pub async fn stop_by_name(self, name: String) -> Result<()> {
         for job in self
             .jobs
             .into_iter()
@@ -94,7 +80,9 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             return match job.status {
                 Running(s) => {
                     dbg!("sending the stop signal now....");
-                    s.send(());
+                    let _xx = s
+                        .send(())
+                        .map_err(|()| anyhow!("send cancel signal failed"))?;
                     Ok(())
                 }
                 _ => Ok(()),
