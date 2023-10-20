@@ -2,11 +2,15 @@ use crate::job::Status::{Registered, Running};
 use crate::lock::LockData;
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use cron::Schedule as CronSchedule;
 use derive_more::Into;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Display;
+use std::str::FromStr;
 use std::sync::Arc;
+use std::time::{Duration, UNIX_EPOCH};
 use tokio::sync::oneshot::Sender;
 use tokio::sync::Mutex;
 
@@ -50,7 +54,7 @@ pub struct JobConfig {
     pub state: Vec<u8>,
     pub schedule: Schedule,
     pub enabled: bool,
-    pub last_run: i64,
+    pub last_run: u16,
     pub lock: LockData,
 }
 
@@ -63,9 +67,27 @@ impl JobConfig {
             schedule,
             enabled: true,
             last_run: Default::default(),
-            lock: LockData { expires: 0, version: 0, ttl: Default::default() },
-
+            lock: LockData::default(),
         }
+    }
+    pub fn run_job_now(self) -> Result<bool> {
+        if !self.enabled {
+            return Ok(false);
+        }
+        if self.last_run.eq(&0) {
+            return Ok(true);
+        }
+        let last_run =
+            DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_millis(self.last_run as u64));
+        let schedule = CronSchedule::from_str(self.schedule.expr.as_str())?;
+        let next_scheduled_run = schedule
+            .after(&last_run)
+            .next()
+            .map_or_else(|| 0, |t| t.timestamp_millis());
+        if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
+            return Ok(true);
+        }
+        Ok(false)
     }
 }
 

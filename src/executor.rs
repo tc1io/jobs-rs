@@ -83,20 +83,22 @@ impl State {
                 let mut job_config = ex.job_config.clone();
                 let name = job_config.clone().name;
                 let acquire_lock = ex.lock_repo.acquire_lock(job_config.clone()).await?;
-                if acquire_lock {
-                    let refresh_lock = ex.lock_repo.refresh_lock(job_config);
-                    let mut action = ex.action.lock().await;
-                    let xx = action.call(ex.job_name.clone().into(), Vec::new());
-                    let f = tokio::select! {
-                        refreshed = refresh_lock => {
-                            // dbg!(refreshed);
-                          todo!()
-                        }
-                        bar = xx => {
-                            ex.job_repo.save_state(name, bar).await;
-                            todo!()
-                                }
-                    };
+                if job_config.run_job_now()? {
+                    if acquire_lock {
+                        let refresh_lock = ex.lock_repo.refresh_lock(job_config);
+                        let mut action = ex.action.lock().await;
+                        let xx = action.call(ex.job_name.clone().into(), Vec::new());
+                        let f = tokio::select! {
+                            refreshed = refresh_lock => {
+                                // dbg!(refreshed);
+                              todo!()
+                            }
+                            bar = xx => {
+                                ex.job_repo.save_state(name, bar).await;
+                                todo!()
+                                    }
+                        };
+                    }
                 }
                 Ok(Some(Start()))
             }

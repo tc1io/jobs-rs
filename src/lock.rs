@@ -2,16 +2,15 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 // use chrono::u;
+use crate::job::JobConfig;
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::{dbg, format, println};
 use std::thread::sleep;
 use std::time::Duration;
-use chrono::Utc;
+use std::{dbg, format, println};
 use tokio::time::interval;
-use crate::job::JobConfig;
 
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct LockData {
     pub expires: i64,
     pub version: i8,
