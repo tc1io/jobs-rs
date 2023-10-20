@@ -4,6 +4,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use derive_more::Into;
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::fmt::Display;
 use std::sync::Arc;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::Mutex;
@@ -15,6 +17,12 @@ pub trait JobAction {
 
 #[derive(Default, Clone, Into, Eq, Hash, PartialEq, Debug, Serialize, Deserialize)]
 pub struct JobName(pub String);
+
+impl Display for JobName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Debug)]
 pub enum Status {

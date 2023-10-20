@@ -17,6 +17,8 @@ cron = "0.12.0"
 derive_more = "0.99.17"
 tokio-timer = "0.2.13"
 anyhow = "1.0.75"
+log = "0.4.20"
+simple_logger = "4.2.0"
 
 [[bin]]
 name  = "jm"

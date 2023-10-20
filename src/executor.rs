@@ -62,7 +62,6 @@ impl State {
                 ));
                 match ex.cancel_signal_rx.try_recv() {
                     Ok(_) => {
-                        dbg!("received stopped signal....", ex.job_name.clone());
                         return Ok(None);
                     }
                     Err(_e) => {}
@@ -82,6 +81,7 @@ impl State {
             Run() => {
                 dbg!("run.. returning check");
                 let mut job_config = ex.job_config.clone();
+                let name = job_config.clone().name;
                 let acquire_lock = ex.lock_repo.acquire_lock(job_config.clone()).await?;
                 if acquire_lock {
                     let refresh_lock = ex.lock_repo.refresh_lock(job_config);
@@ -93,11 +93,12 @@ impl State {
                           todo!()
                         }
                         bar = xx => {
-                            ex.job_repo.save_state(job_config.name.into(), job_config.state).await;
+                            ex.job_repo.save_state(name, bar).await;
                             todo!()
                                 }
                     };
                 }
+                Ok(Some(Start()))
             }
         };
     }

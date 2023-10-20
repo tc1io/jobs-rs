@@ -12,6 +12,7 @@ use tokio::time::{sleep, Duration};
 
 #[tokio::main]
 async fn main() {
+    simple_logger::init().unwrap();
     let db_client = PickleDb::new(
         "example.db",
         PickleDbDumpPolicy::AutoDump,
@@ -67,7 +68,7 @@ struct Project {
 #[async_trait]
 impl JobAction for JobImplementer {
     async fn call(&mut self, name: String, _state: Vec<u8>) -> anyhow::Result<Vec<u8>> {
-        dbg!(name);
+        // dbg!(name);
         let state = Vec::new();
         Ok(state)
     }

@@ -26,7 +26,6 @@ impl Repo {
 #[async_trait]
 impl JobRepo for Repo {
     async fn create_or_update_job(&mut self, job: JobConfig) -> Result<bool> {
-        dbg!("create job");
         self.db
             .write()
             .await
