@@ -62,7 +62,6 @@ impl State {
                 ));
                 match ex.cancel_signal_rx.try_recv() {
                     Ok(_) => {
-                        dbg!("received stopped signal....", ex.job_name.clone());
                         return Ok(None);
                     }
                     Err(_e) => {}
@@ -81,7 +80,6 @@ impl State {
                 Ok(Some(Run()))
             }
             Run() => {
-                dbg!("run.. returning check");
                 let mut action = ex.action.lock().await;
                 let _xx = action.call(ex.job_name.clone().into(), Vec::new()).await?;
                 Ok(Some(Start()))

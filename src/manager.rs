@@ -3,6 +3,7 @@ use crate::job::Status::Running;
 use crate::job::{Job, JobAction, JobName, JobRepo, Schedule};
 use crate::lock::LockRepo;
 use anyhow::{anyhow, Result};
+use log::{info, warn};
 use tokio::sync::oneshot;
 
 pub struct JobManager<J, L>
@@ -33,6 +34,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
     ) {
         self.jobs
             .push(Job::new(JobName(name.clone().into()), action, schedule));
+        info!("job: {:?} registered", name);
     }
 
     pub async fn start_all(&mut self) -> Result<()> {
@@ -51,18 +53,25 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             let j = job_repo.clone();
             let l = lock_repo.clone();
             tokio::spawn(async move {
-                let mut ex = Executor::new(name, action, schedule, j, l, rx);
+                let mut ex = Executor::new(name.clone(), action, schedule, j, l, rx);
                 let mut state = State::init();
                 loop {
                     match state.execute(&mut ex).await {
                         Ok(maybe_state) => {
                             if maybe_state.map(|s| state = s).is_none() {
-                                println!("empty state. Aborting job!!");
+                                info!(
+                                    "received empty state. Aborting job: {:?}",
+                                    name.clone().to_string()
+                                );
                                 break;
                             }
                         }
                         Err(e) => {
-                            println!("error: {:?}. Aborting job", e);
+                            warn!(
+                                "error: {:?}. Aborting job: {:?}",
+                                e.to_string(),
+                                name.clone()
+                            );
                             break;
                         }
                     }
@@ -79,7 +88,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         {
             return match job.status {
                 Running(s) => {
-                    dbg!("sending the stop signal now....");
+                    info!("received stop signal. Stopping job: {:?}", name.clone());
                     let _xx = s
                         .send(())
                         .map_err(|()| anyhow!("send cancel signal failed"))?;
