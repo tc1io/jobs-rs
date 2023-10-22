@@ -2,7 +2,9 @@ use crate::executor::State::{Create, Run, Start};
 use crate::job::Schedule;
 use crate::job::{JobAction, JobConfig, JobName, JobRepo};
 use crate::lock::{LockData, LockRepo};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use chrono::Utc;
+use std::ops::Add;
 use std::sync::Arc;
 use tokio::sync::oneshot::Receiver;
 use tokio::sync::Mutex;
@@ -37,7 +39,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
             cancel_signal_rx,
             job_repo,
             lock_repo,
-            lock_data: LockData::default(),
+            lock_data: LockData::new(),
         }
     }
 }
@@ -57,18 +59,19 @@ impl State {
         &mut self,
         ex: &mut Executor<J, L>,
     ) -> Result<Option<State>> {
+        let mut interval = time::interval(time::Duration::from_secs(
+            ex.job_config.clone().check_interval_sec,
+        ));
+        interval.tick().await; // The first tick completes immediately
         return match self {
             Start() => {
-                let mut interval = time::interval(time::Duration::from_secs(
-                    ex.job_config.clone().check_interval_sec,
-                ));
                 match ex.cancel_signal_rx.try_recv() {
                     Ok(_) => {
                         return Ok(None);
                     }
                     Err(_e) => {}
                 }
-                interval.tick().await; // TODO: waits for timer.. should be a better solution
+                interval.tick().await;
                 Ok(Some(Create()))
             }
             Create() => {
@@ -84,31 +87,30 @@ impl State {
                 let job_config = ex.job_config.clone();
                 if job_config.clone().run_job_now()? {
                     let name = job_config.clone().name;
-                    if ex
-                        .lock_repo
-                        .acquire_lock(name.clone(), ex.lock_data.clone())
-                        .await?
-                    {
+                    let mut lock_data = ex.lock_data.clone();
+                    lock_data.expires = (Utc::now().timestamp_millis() as u64)
+                        .add(lock_data.ttl.as_millis() as u64);
+                    if ex.lock_repo.acquire_lock(name.clone(), lock_data).await? {
                         let refresh_lock_fut = ex.lock_repo.refresh_lock(name.clone());
                         let mut action = ex.action.lock().await;
                         let job_fut = action.call(ex.job_name.clone().into(), Vec::new());
-                        let _f = tokio::select! {
+                        tokio::select! {
                                 refreshed = refresh_lock_fut => {
                                 match refreshed {
-                                    Ok(x) => Ok(x),
-                                    Err(e) => Err(e),
+                                    Ok(_x) => Ok(()),
+                                    Err(e) => Err(anyhow!(e)),
                                     }
                                 }
                                 state = job_fut => {
                                 match state {
                                     Ok(s) => {
-                                        let _x = ex.job_repo.save_state(name, s).await;
-                                        Ok(true)
+                                        let _x = ex.job_repo.save_state(name, s).await?;
+                                        Ok(())
                                     }
-                                    Err(e) => Err(e),
+                                    Err(e) => Err(anyhow!(e)),
                                 }
                             }
-                        };
+                        }?;
                     }
                 }
                 Ok(Some(Start()))

@@ -4,7 +4,7 @@ use jobs::repos::pickledb::Repo;
 use jobs::{job::JobAction, manager::JobManager, repos};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, Duration, Sleep};
 
 #[tokio::main]
 async fn main() {
@@ -46,7 +46,7 @@ async fn main() {
         .stop_by_name("project-puller".to_string())
         .await
         .unwrap();
-    sleep(Duration::from_secs(10)).await;
+    sleep(Duration::from_secs(100)).await;
 }
 
 #[derive(Clone)]
@@ -65,6 +65,7 @@ impl JobAction for JobImplementer {
     async fn call(&mut self, _name: String, _state: Vec<u8>) -> anyhow::Result<Vec<u8>> {
         // dbg!(name);
         let state = Vec::new();
+        sleep(Duration::from_secs(5)).await;
         Ok(state)
     }
 }

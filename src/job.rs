@@ -54,19 +54,17 @@ pub struct JobConfig {
     pub schedule: Schedule,
     pub enabled: bool,
     pub last_run: u16,
-    // pub lock: LockData,
 }
 
 impl JobConfig {
     pub fn new(name: JobName, schedule: Schedule) -> Self {
         JobConfig {
             name,
-            check_interval_sec: 2, // checks every 5sec
+            check_interval_sec: 2, // maybe check every 5sec?
             state: Default::default(),
             schedule,
             enabled: true,
             last_run: Default::default(),
-            // lock: LockData::default(),
         }
     }
     pub fn run_job_now(self) -> Result<bool> {
