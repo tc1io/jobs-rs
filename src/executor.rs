@@ -46,14 +46,14 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum State {
-    Start(),
-    Create(),
-    Run(),
+    Start,
+    Create,
+    Run,
 }
 
 impl State {
-    pub fn init() -> State {
-        Start()
+    pub fn new() -> State {
+        Start
     }
     pub async fn execute<J: JobRepo + Sync + Send + Clone, L: LockRepo + Sync + Send + Clone>(
         &mut self,
@@ -64,7 +64,7 @@ impl State {
         ));
         interval.tick().await; // The first tick completes immediately
         return match self {
-            Start() => {
+            Start => {
                 match ex.cancel_signal_rx.try_recv() {
                     Ok(_) => {
                         return Ok(None);
@@ -72,18 +72,20 @@ impl State {
                     Err(_e) => {}
                 }
                 interval.tick().await;
-                Ok(Some(Create()))
+                dbg!("start");
+                Ok(Some(Create))
             }
-            Create() => {
+            Create => {
+                dbg!("create");
                 let mut job_config = ex.job_config.clone();
                 if let Some(jc) = ex.job_repo.get_job(job_config.name.clone().into()).await? {
                     job_config.state = jc.state;
                     job_config.last_run = jc.last_run
                 }
                 ex.job_repo.create_or_update_job(job_config.clone()).await?;
-                Ok(Some(Run()))
+                Ok(Some(Run))
             }
-            Run() => {
+            Run => {
                 let job_config = ex.job_config.clone();
                 if job_config.clone().run_job_now()? {
                     let name = job_config.clone().name;
@@ -115,7 +117,7 @@ impl State {
                         }?;
                     }
                 }
-                Ok(Some(Start()))
+                Ok(Some(Start))
             }
         };
     }
