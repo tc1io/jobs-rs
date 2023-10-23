@@ -39,7 +39,7 @@ async fn main() {
         String::from("project-updater"),
         job.clone(),
         Schedule {
-            expr: "0 * 0 ? * * *".to_string(),
+            expr: "* 1 * * * *".to_string(),
         },
     );
     let _ = manager.start_all().await.unwrap();

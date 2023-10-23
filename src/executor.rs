@@ -104,7 +104,9 @@ impl State {
                                 state = job_fut => {
                                 match state {
                                     Ok(s) => {
-                                        let _x = ex.job_repo.save_state(name, Utc::now().timestamp_millis(), s).await?;
+                                        let last_run = Utc::now().timestamp_millis();
+                                        let _x = ex.job_repo.save_state(name, last_run, s).await?;
+                                        ex.job_config.last_run = last_run;
                                         Ok(())
                                     }
                                     Err(e) => Err(anyhow!(e)),

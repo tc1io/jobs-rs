@@ -81,6 +81,12 @@ impl JobConfig {
             .after(&last_run)
             .next()
             .map_or_else(|| 0, |t| t.timestamp_millis());
+        dbg!(
+            "lastrun: {:?}, next-sch: {:?}, now: {:?}",
+            last_run,
+            next_scheduled_run,
+            Utc::now().timestamp_millis()
+        );
         if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
             return Ok(true);
         }
@@ -106,10 +112,6 @@ impl Job {
             status: Registered,
         }
     }
-    pub fn should_run_now(self) -> Result<bool> {
-        Ok(false)
-    }
-
     pub fn get_registered_or_running(s: &Status) -> bool {
         match s {
             Registered => true,
