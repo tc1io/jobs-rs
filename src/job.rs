@@ -81,12 +81,6 @@ impl JobConfig {
             .after(&last_run)
             .next()
             .map_or_else(|| 0, |t| t.timestamp_millis());
-        dbg!(
-            "lastrun: {:?}, next-sch: {:?}, now: {:?}",
-            last_run,
-            next_scheduled_run,
-            Utc::now().timestamp_millis()
-        );
         if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
             return Ok(true);
         }
