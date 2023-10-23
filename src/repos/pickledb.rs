@@ -36,19 +36,21 @@ impl JobRepo for Repo {
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>> {
         Ok(self.db.write().await.get::<JobConfig>(name.as_ref()))
     }
-    async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool> {
+    async fn save_state(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> Result<bool> {
         let name1 = name.clone();
-        let mut job = self.get_job(name.into()).await.unwrap().unwrap();
+        let mut job = self
+            .get_job(name.into())
+            .await
+            .map_err(|e| anyhow!(e))?
+            .ok_or(anyhow!("job not found"))?;
 
         job.state = state;
-        // let name1 = name.clone()
-        // job.last_run = Utc::now().timestamp_millis();
+        job.last_run = last_run;
         self.db
             .write()
             .await
             .set(name1.as_ref(), &job)
             .map_err(|e| anyhow!(e.to_string()))?;
-        println!("state saved");
         Ok(true)
     }
 }

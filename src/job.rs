@@ -15,7 +15,7 @@ use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait JobAction {
-    async fn call(&mut self, name: String, state: Vec<u8>) -> Result<Vec<u8>>;
+    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>>;
 }
 
 #[derive(Default, Clone, Into, Eq, Hash, PartialEq, Debug, Serialize, Deserialize)]
@@ -53,7 +53,7 @@ pub struct JobConfig {
     pub state: Vec<u8>,
     pub schedule: Schedule,
     pub enabled: bool,
-    pub last_run: u16,
+    pub last_run: i64,
 }
 
 impl JobConfig {
@@ -122,5 +122,5 @@ impl Job {
 pub trait JobRepo {
     async fn create_or_update_job(&mut self, job: JobConfig) -> Result<bool>;
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>>;
-    async fn save_state(&mut self, name: JobName, state: Vec<u8>) -> Result<bool>;
+    async fn save_state(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> Result<bool>;
 }

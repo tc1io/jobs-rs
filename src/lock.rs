@@ -2,7 +2,6 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::job::JobName;
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

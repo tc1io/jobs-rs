@@ -14,7 +14,7 @@ where
     J: JobRepo + Sync + Send + Clone,
     L: LockRepo + Sync + Send + Clone,
 {
-    job_name: JobName,
+    // job_name: JobName,
     action: Arc<Mutex<dyn JobAction + Send + Sync>>,
     job_config: JobConfig,
     cancel_signal_rx: Receiver<()>,
@@ -33,7 +33,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
         cancel_signal_rx: Receiver<()>,
     ) -> Self {
         Executor {
-            job_name: job_name.clone(),
+            // job_name: job_name.clone(),
             action,
             job_config: JobConfig::new(job_name, schedule),
             cancel_signal_rx,
@@ -93,7 +93,7 @@ impl State {
                     if ex.lock_repo.acquire_lock(name.clone(), lock_data).await? {
                         let refresh_lock_fut = ex.lock_repo.refresh_lock(name.clone());
                         let mut action = ex.action.lock().await;
-                        let job_fut = action.call(ex.job_name.clone().into(), Vec::new());
+                        let job_fut = action.call(Vec::new());
                         tokio::select! {
                                 refreshed = refresh_lock_fut => {
                                 match refreshed {
@@ -104,7 +104,7 @@ impl State {
                                 state = job_fut => {
                                 match state {
                                     Ok(s) => {
-                                        let _x = ex.job_repo.save_state(name, s).await?;
+                                        let _x = ex.job_repo.save_state(name, Utc::now().timestamp_millis(), s).await?;
                                         Ok(())
                                     }
                                     Err(e) => Err(anyhow!(e)),
