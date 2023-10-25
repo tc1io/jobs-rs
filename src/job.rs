@@ -41,12 +41,12 @@ pub struct Job {
     pub status: Status,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Default)]
+#[derive(Clone, Serialize, Deserialize, Debug, Default, PartialEq)]
 pub struct Schedule {
     pub expr: String, // TODO: consider alias
 }
 
-#[derive(Clone, Serialize, Debug, Deserialize)]
+#[derive(Clone, Serialize, Debug, Deserialize, PartialEq)]
 pub struct JobConfig {
     pub name: JobName,
     pub check_interval_sec: u64,
