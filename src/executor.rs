@@ -3,6 +3,7 @@ use crate::job::Schedule;
 use crate::job::{JobAction, JobConfig, JobName, JobRepo};
 use crate::lock::{LockData, LockRepo};
 use anyhow::{anyhow, Result};
+use async_recursion::async_recursion;
 use chrono::Utc;
 use std::ops::Add;
 use std::sync::Arc;
@@ -55,6 +56,7 @@ impl State {
     pub fn new() -> State {
         Start
     }
+    #[async_recursion]
     pub async fn execute<J: JobRepo + Sync + Send + Clone, L: LockRepo + Sync + Send + Clone>(
         &mut self,
         ex: &mut Executor<J, L>,
@@ -72,18 +74,16 @@ impl State {
                     Err(_e) => {}
                 }
                 interval.tick().await;
-                dbg!("start");
-                Ok(Some(Create))
+                Create.execute(ex).await
             }
             Create => {
-                dbg!("create");
                 let mut job_config = ex.job_config.clone();
                 if let Some(jc) = ex.job_repo.get_job(job_config.name.clone().into()).await? {
                     job_config.state = jc.state;
                     job_config.last_run = jc.last_run
                 }
                 ex.job_repo.create_or_update_job(job_config.clone()).await?;
-                Ok(Some(Run))
+                Run.execute(ex).await
             }
             Run => {
                 let job_config = ex.job_config.clone();
@@ -117,7 +117,7 @@ impl State {
                         }?;
                     }
                 }
-                Ok(Some(Start))
+                Start.execute(ex).await
             }
         };
     }
