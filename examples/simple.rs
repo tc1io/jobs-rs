@@ -43,7 +43,12 @@ async fn main() {
         },
     );
     let _ = manager.start_all().await.unwrap();
-    sleep(Duration::from_secs(200)).await;
+    sleep(Duration::from_secs(4)).await;
+    manager
+        .stop_by_name(String::from("project-updater"))
+        .await
+        .unwrap();
+    sleep(Duration::from_secs(20)).await;
 }
 
 #[derive(Clone)]
