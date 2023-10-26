@@ -45,11 +45,11 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum State {
     Start,
-    Create,
-    Run,
+    Create(JobConfig),
+    Run(JobConfig),
 }
 
 impl State {
@@ -74,19 +74,17 @@ impl State {
                     Err(_e) => {}
                 }
                 interval.tick().await;
-                Create.execute(ex).await
+                Create(ex.job_config.clone()).execute(ex).await
             }
-            Create => {
-                let mut job_config = ex.job_config.clone();
+            Create(job_config) => {
                 if let Some(jc) = ex.job_repo.get_job(job_config.name.clone().into()).await? {
                     job_config.state = jc.state;
                     job_config.last_run = jc.last_run
                 }
                 ex.job_repo.create_or_update_job(job_config.clone()).await?;
-                Run.execute(ex).await
+                Run(job_config.clone()).execute(ex).await
             }
-            Run => {
-                let job_config = ex.job_config.clone();
+            Run(job_config) => {
                 if job_config.clone().run_job_now()? {
                     let name = job_config.clone().name;
                     let mut lock_data = ex.lock_data.clone();
