@@ -65,26 +65,22 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             job.status = Running(tx);
             tokio::spawn(async move {
                 let mut ex = Executor::new(name.clone(), action, schedule, job_repo, lock_repo, rx);
-                let mut state = State::init();
-                loop {
-                    match state.execute(&mut ex).await {
-                        Ok(maybe_state) => {
-                            if maybe_state.map(|s| state = s).is_none() {
-                                info!(
-                                    "received empty state. Aborting job: {:?}",
-                                    name.clone().to_string()
-                                );
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            warn!(
-                                "error: {:?}. Aborting job: {:?}",
-                                e.to_string(),
-                                name.clone()
-                            );
-                            break;
-                        }
+                let mut state = State::new();
+                match state.execute(&mut ex).await {
+                    Ok(_s) => {
+                        info!(
+                            "received empty state. Aborting job: {:?}",
+                            name.clone().to_string()
+                        );
+                        return;
+                    }
+                    Err(e) => {
+                        warn!(
+                            "error: {:?}. Aborting job: {:?}",
+                            e.to_string(),
+                            name.clone()
+                        );
+                        return;
                     }
                 }
             });

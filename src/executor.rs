@@ -3,6 +3,7 @@ use crate::job::Schedule;
 use crate::job::{JobAction, JobConfig, JobName, JobRepo};
 use crate::lock::{LockData, LockRepo};
 use anyhow::{anyhow, Result};
+use async_recursion::async_recursion;
 use chrono::Utc;
 use std::ops::Add;
 use std::sync::Arc;
@@ -46,15 +47,16 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
 
 #[derive(Clone, PartialEq)]
 pub enum State {
-    Start(),
+    Start,
     Create(JobConfig),
     Run(JobConfig),
 }
 
 impl State {
-    pub fn init() -> State {
-        Start()
+    pub fn new() -> State {
+        Start
     }
+    #[async_recursion]
     pub async fn execute<J: JobRepo + Sync + Send + Clone, L: LockRepo + Sync + Send + Clone>(
         &mut self,
         ex: &mut Executor<J, L>,
@@ -64,7 +66,7 @@ impl State {
         ));
         interval.tick().await; // The first tick completes immediately
         return match self {
-            Start() => {
+            Start => {
                 match ex.cancel_signal_rx.try_recv() {
                     Ok(_) => {
                         return Ok(None);
@@ -72,20 +74,17 @@ impl State {
                     Err(_e) => {}
                 }
                 interval.tick().await;
-                let mut job_config = ex.job_config.clone();
-                Ok(Some(Create(job_config)))
+                Create(ex.job_config.clone()).execute(ex).await
             }
             Create(job_config) => {
-                // let mut job_config = ex.job_config.clone();
                 if let Some(jc) = ex.job_repo.get_job(job_config.name.clone().into()).await? {
                     job_config.state = jc.state;
                     job_config.last_run = jc.last_run
                 }
                 ex.job_repo.create_or_update_job(job_config.clone()).await?;
-                Ok(Some(Run(job_config.clone())))
+                Run(job_config.clone()).execute(ex).await
             }
             Run(job_config) => {
-                // let job_config = ex.job_config.clone();
                 if job_config.clone().run_job_now()? {
                     let name = job_config.clone().name;
                     let mut lock_data = ex.lock_data.clone();
@@ -116,7 +115,7 @@ impl State {
                         }?;
                     }
                 }
-                Ok(Some(Start()))
+                Start.execute(ex).await
             }
         };
     }
