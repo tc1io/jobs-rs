@@ -82,7 +82,6 @@ impl State {
                 }
                 interval.tick().await;
                 Ok(Some(Create(ex.job_config.clone())))
-                // Create(ex.job_config.clone()).execute(ex).await
             }
             Create(job_config) => {
                 if let Some(jc) = ex.job_repo.get_job(job_config.name.clone().into()).await? {
@@ -91,7 +90,6 @@ impl State {
                 }
                 ex.job_repo.create_or_update_job(job_config.clone()).await?;
                 Ok(Some(Run(ex.job_config.clone())))
-                // Run(job_config.clone()).execute(ex).await
             }
             Run(job_config) => {
                 if job_config.clone().run_job_now()? {
@@ -125,7 +123,6 @@ impl State {
                     }
                 }
                 Ok(Some(Start))
-                // Start.execute(ex).await
             }
         };
     }
