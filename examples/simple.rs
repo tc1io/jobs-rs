@@ -42,13 +42,13 @@ async fn main() {
             expr: "0 * * * * *".to_string(),
         },
     );
-    manager.register(
-        String::from("project-cleaner"),
-        job.clone(),
-        Schedule {
-            expr: "0 * * * * *".to_string(),
-        },
-    );
+    // manager.register(
+    //     String::from("project-cleaner"),
+    //     job.clone(),
+    //     Schedule {
+    //         expr: "0 * * * * *".to_string(),
+    //     },
+    // );
     let _ = manager.start_all().await.unwrap();
     sleep(Duration::from_secs(4)).await;
     manager

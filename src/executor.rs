@@ -3,9 +3,8 @@ use crate::job::Schedule;
 use crate::job::{JobAction, JobConfig, JobName, JobRepo};
 use crate::lock::{LockData, LockRepo};
 use anyhow::{anyhow, Result};
-use async_recursion::async_recursion;
 use chrono::Utc;
-use log::{info, warn};
+use log::info;
 use std::ops::Add;
 use std::sync::Arc;
 use tokio::sync::oneshot::Receiver;
@@ -42,25 +41,14 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
             lock_data: LockData::new(),
         }
     }
-    pub async fn run(&mut self) {
+    pub async fn run(&mut self) -> Result<()> {
         let mut state = State::new();
-        match state.execute(self).await {
-            Ok(_s) => {
-                info!(
-                    "received empty state. Aborting job: {:?}",
-                    self.job_config.name.clone().to_string()
-                );
-                return;
-            }
-            Err(e) => {
-                warn!(
-                    "error: {:?}. Aborting job: {:?}",
-                    e.to_string(),
-                    self.job_config.name.clone().to_string()
-                );
-                return;
-            }
-        }
+        while state.execute(self).await?.map(|s| state = s).is_some() {}
+        info!(
+            "received empty state. Aborting job: {:?}",
+            self.job_config.name.clone().to_string()
+        );
+        Ok(())
     }
 }
 
@@ -75,7 +63,7 @@ impl State {
     pub fn new() -> State {
         Start
     }
-    #[async_recursion]
+
     pub async fn execute<J: JobRepo + Sync + Send + Clone, L: LockRepo + Sync + Send + Clone>(
         &mut self,
         ex: &mut Executor<J, L>,
@@ -93,7 +81,7 @@ impl State {
                     Err(_e) => {}
                 }
                 interval.tick().await;
-                Create(ex.job_config.clone()).execute(ex).await
+                Ok(Some(Create(ex.job_config.clone())))
             }
             Create(job_config) => {
                 if let Some(jc) = ex.job_repo.get_job(job_config.name.clone().into()).await? {
@@ -101,7 +89,7 @@ impl State {
                     job_config.last_run = jc.last_run
                 }
                 ex.job_repo.create_or_update_job(job_config.clone()).await?;
-                Run(job_config.clone()).execute(ex).await
+                Ok(Some(Run(ex.job_config.clone())))
             }
             Run(job_config) => {
                 if job_config.clone().run_job_now()? {
@@ -134,7 +122,7 @@ impl State {
                         }?;
                     }
                 }
-                Start.execute(ex).await
+                Ok(Some(Start))
             }
         };
     }

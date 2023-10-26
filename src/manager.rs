@@ -3,7 +3,7 @@ use crate::job::Status::Running;
 use crate::job::{Job, JobAction, JobName, JobRepo, Schedule};
 use crate::lock::LockRepo;
 use anyhow::{anyhow, Result};
-use log::info;
+use log::{info, warn};
 use tokio::sync::oneshot;
 
 /// JobManager holds the job + lock repo along with the list of jobs
@@ -65,7 +65,10 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             job.status = Running(tx);
             let mut ex = Executor::new(name.clone(), action, schedule, job_repo, lock_repo, rx);
             tokio::spawn(async move {
-                ex.run().await;
+                match ex.run().await {
+                    Ok(_) => {}
+                    Err(e) => warn!("{:?}", e),
+                };
             });
         }
         Ok(())
