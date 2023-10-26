@@ -5,6 +5,7 @@ use crate::lock::{LockData, LockRepo};
 use anyhow::{anyhow, Result};
 use async_recursion::async_recursion;
 use chrono::Utc;
+use futures::future::{ok, OptionFuture};
 use log::{info, warn};
 use std::ops::Add;
 use std::sync::Arc;
@@ -44,23 +45,30 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
     }
     pub async fn run(&mut self) {
         let mut state = State::new();
-        match state.execute(self).await {
-            Ok(_s) => {
-                info!(
-                    "received empty state. Aborting job: {:?}",
-                    self.job_config.name.clone().to_string()
-                );
-                return;
-            }
-            Err(e) => {
-                warn!(
-                    "error: {:?}. Aborting job: {:?}",
-                    e.to_string(),
-                    self.job_config.name.clone().to_string()
-                );
-                return;
-            }
+        while let Some(_s) = state.execute(self).await.map(|s| state = s) {
+            // info!(
+            //     "received empty state. Aborting job: {:?}",
+            //     self.job_config.name.clone().to_string()
+            // );
+            // dbg!(state);
         }
+        // match state.execute(self).await {
+        //     Ok(_s) => {
+        //         info!(
+        //             "received empty state. Aborting job: {:?}",
+        //             self.job_config.name.clone().to_string()
+        //         );
+        //         return;
+        //     }
+        //     Err(e) => {
+        //         warn!(
+        //             "error: {:?}. Aborting job: {:?}",
+        //             e.to_string(),
+        //             self.job_config.name.clone().to_string()
+        //         );
+        //         return;
+        //     }
+        // }
     }
 }
 
@@ -75,11 +83,19 @@ impl State {
     pub fn new() -> State {
         Start
     }
+
+    // pub fn next(&mut self) -> Option<Self> {
+    //     match self {
+    //         Start => Some(Create()),
+    //         Create(_) => Some(Run()),
+    //         Run(_) => Start,
+    //     }
+    // }
     #[async_recursion]
     pub async fn execute<J: JobRepo + Sync + Send + Clone, L: LockRepo + Sync + Send + Clone>(
         &mut self,
         ex: &mut Executor<J, L>,
-    ) -> Result<Option<State>> {
+    ) -> Option<State> {
         let mut interval = time::interval(time::Duration::from_secs(
             ex.job_config.clone().check_interval_sec,
         ));
@@ -88,28 +104,44 @@ impl State {
             Start => {
                 match ex.cancel_signal_rx.try_recv() {
                     Ok(_) => {
-                        return Ok(None);
+                        return None;
                     }
                     Err(_e) => {}
                 }
                 interval.tick().await;
-                Create(ex.job_config.clone()).execute(ex).await
+                Some(Create(ex.job_config.clone()))
+                // Create(ex.job_config.clone()).execute(ex).await
             }
             Create(job_config) => {
-                if let Some(jc) = ex.job_repo.get_job(job_config.name.clone().into()).await? {
+                dbg!("create");
+                if let Some(jc) = ex
+                    .job_repo
+                    .get_job(job_config.name.clone().into())
+                    .await
+                    .ok()?
+                {
                     job_config.state = jc.state;
                     job_config.last_run = jc.last_run
                 }
-                ex.job_repo.create_or_update_job(job_config.clone()).await?;
-                Run(job_config.clone()).execute(ex).await
+                ex.job_repo
+                    .create_or_update_job(job_config.clone())
+                    .await
+                    .ok()?;
+                Some(Run(ex.job_config.clone()))
+                // Run(job_config.clone()).execute(ex).await
             }
             Run(job_config) => {
-                if job_config.clone().run_job_now()? {
+                if job_config.clone().run_job_now().ok()? {
                     let name = job_config.clone().name;
                     let mut lock_data = ex.lock_data.clone();
                     lock_data.expires = (Utc::now().timestamp_millis() as u64)
                         .add(lock_data.ttl.as_millis() as u64);
-                    if ex.lock_repo.acquire_lock(name.clone(), lock_data).await? {
+                    if ex
+                        .lock_repo
+                        .acquire_lock(name.clone(), lock_data)
+                        .await
+                        .ok()?
+                    {
                         let refresh_lock_fut = ex.lock_repo.refresh_lock(name.clone());
                         let mut action = ex.action.lock().await;
                         let job_fut = action.call(Vec::new());
@@ -124,17 +156,18 @@ impl State {
                                 match state {
                                     Ok(s) => {
                                         let last_run = Utc::now().timestamp_millis();
-                                        let _x = ex.job_repo.save_state(name, last_run, s).await?;
+                                        let _x = ex.job_repo.save_state(name, last_run, s).await.ok()?;
                                         ex.job_config.last_run = last_run;
                                         Ok(())
                                     }
                                     Err(e) => Err(anyhow!(e)),
                                 }
                             }
-                        }?;
+                        }.ok()?;
                     }
                 }
-                Start.execute(ex).await
+                Some(Start)
+                // Start.execute(ex).await
             }
         };
     }
