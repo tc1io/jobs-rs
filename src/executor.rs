@@ -5,6 +5,7 @@ use crate::lock::{LockData, LockRepo};
 use anyhow::{anyhow, Result};
 use async_recursion::async_recursion;
 use chrono::Utc;
+use log::{info, warn};
 use std::ops::Add;
 use std::sync::Arc;
 use tokio::sync::oneshot::Receiver;
@@ -15,7 +16,6 @@ where
     J: JobRepo + Sync + Send + Clone,
     L: LockRepo + Sync + Send + Clone,
 {
-    // job_name: JobName,
     action: Arc<Mutex<dyn JobAction + Send + Sync>>,
     job_config: JobConfig,
     cancel_signal_rx: Receiver<()>,
@@ -34,13 +34,32 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
         cancel_signal_rx: Receiver<()>,
     ) -> Self {
         Executor {
-            // job_name: job_name.clone(),
             action,
             job_config: JobConfig::new(job_name, schedule),
             cancel_signal_rx,
             job_repo,
             lock_repo,
             lock_data: LockData::new(),
+        }
+    }
+    pub async fn run(&mut self) {
+        let mut state = State::new();
+        match state.execute(self).await {
+            Ok(_s) => {
+                info!(
+                    "received empty state. Aborting job: {:?}",
+                    self.job_config.name.clone().to_string()
+                );
+                return;
+            }
+            Err(e) => {
+                warn!(
+                    "error: {:?}. Aborting job: {:?}",
+                    e.to_string(),
+                    self.job_config.name.clone().to_string()
+                );
+                return;
+            }
         }
     }
 }
