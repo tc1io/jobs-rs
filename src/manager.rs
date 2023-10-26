@@ -1,9 +1,9 @@
-use crate::executor::{Executor, State};
+use crate::executor::Executor;
 use crate::job::Status::Running;
 use crate::job::{Job, JobAction, JobName, JobRepo, Schedule};
 use crate::lock::LockRepo;
 use anyhow::{anyhow, Result};
-use log::{info, warn};
+use log::info;
 use tokio::sync::oneshot;
 
 /// JobManager holds the job + lock repo along with the list of jobs
@@ -63,26 +63,9 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             let schedule = job.schedule.clone();
 
             job.status = Running(tx);
+            let mut ex = Executor::new(name.clone(), action, schedule, job_repo, lock_repo, rx);
             tokio::spawn(async move {
-                let mut ex = Executor::new(name.clone(), action, schedule, job_repo, lock_repo, rx);
-                let mut state = State::new();
-                match state.execute(&mut ex).await {
-                    Ok(_s) => {
-                        info!(
-                            "received empty state. Aborting job: {:?}",
-                            name.clone().to_string()
-                        );
-                        return;
-                    }
-                    Err(e) => {
-                        warn!(
-                            "error: {:?}. Aborting job: {:?}",
-                            e.to_string(),
-                            name.clone()
-                        );
-                        return;
-                    }
-                }
+                ex.run().await;
             });
         }
         Ok(())
