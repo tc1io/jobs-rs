@@ -43,7 +43,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
     }
     pub async fn run(&mut self) -> Result<()> {
         let mut state = State::new();
-        while state.execute(self).await?.map(|s| state = s).is_some() {}
+        while state.execute(self).await?.map(|s| state = s).is_some() {} // execute until the state is None.
         info!(
             "received empty state. Aborting job: {:?}",
             self.job_config.name.clone().to_string()
