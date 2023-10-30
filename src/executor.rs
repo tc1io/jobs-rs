@@ -9,7 +9,7 @@ use std::ops::Add;
 use std::sync::Arc;
 use tokio::sync::oneshot::Receiver;
 use tokio::sync::Mutex;
-use tokio::time;
+use tokio::time::{interval, Duration, MissedTickBehavior};
 pub struct Executor<J, L>
 where
     J: JobRepo + Sync + Send + Clone,
@@ -68,9 +68,10 @@ impl State {
         &mut self,
         ex: &mut Executor<J, L>,
     ) -> Result<Option<State>> {
-        let mut interval = time::interval(time::Duration::from_secs(
+        let mut interval = interval(Duration::from_secs(
             ex.job_config.clone().check_interval_sec,
         ));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip); // skip any missed ticks
         interval.tick().await; // The first tick completes immediately
         return match self {
             Start => {
