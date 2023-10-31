@@ -1,45 +1,47 @@
 use crate::job::{JobConfig, JobName, JobRepo};
 use anyhow::anyhow;
 use async_trait::async_trait;
-use mongodb::bson::{self, doc, Document};
-use mongodb::options::FindOneOptions;
-use mongodb::Client;
-use mongodb::Collection;
-// pub trait Repository<T> {
-//     fn insert(&self, item: T) -> Result<(), mongodb::error::Error>;
-//     fn find(&self, filter: bson::Document) -> Result<Option<T>, mongodb::error::Error>;
-//     fn update(
-//         &self,
-//         filter: bson::Document,
-//         update: bson::Document,
-//     ) -> Result<(), mongodb::error::Error>;
-//     fn delete(&self, filter: bson::Document) -> Result<(), mongodb::error::Error>;
-// }
+use mongodb::bson::{doc, Document};
+use mongodb::options::IndexOptions;
+use mongodb::{Client, IndexModel};
+
 #[derive(Clone)]
 pub struct MongoRepo {
     client: mongodb::Client,
 }
 
 impl MongoRepo {
-    pub fn new(client: mongodb::Client) -> Self {
-        MongoRepo { client }
+    pub async fn init(s: impl AsRef<str>) -> Result<MongoRepo> {
+        dbg!("into");
+        let client = Client::with_uri_str(s.as_ref()).await?;
+        dbg!("done");
+        Ok(MongoRepo { client })
     }
 }
 #[async_trait]
 impl JobRepo for MongoRepo {
     async fn create_or_update_job(&mut self, job: JobConfig) -> anyhow::Result<bool> {
         println!("create_job");
-        self.client
-            .database("foo")
-            .collection::<JobConfig>("job")
+        let c = self.client.clone();
+        match c
+            .database("example")
+            .collection::<JobConfig>("jobs")
             .insert_one(&job, None)
             .await
-            .map(|_| Ok(true))
-            .map_err(|e| anyhow!(e.to_string()))?
+        {
+            Ok(_) => Ok(true),
+            Err(e) => Err(anyhow!(e.to_string())),
+        }
     }
 
     async fn get_job(&mut self, name: JobName) -> anyhow::Result<Option<JobConfig>> {
-        todo!()
+        let c = self.client.clone();
+        let jc = c
+            .database("example")
+            .collection::<JobConfig>("identity")
+            .find_one(doc! {"name":name.as_ref().to_string()}, None)
+            .await?;
+        Ok(jc)
     }
 
     async fn save_state(
