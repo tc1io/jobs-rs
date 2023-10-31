@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use jobs::job::Schedule;
+use jobs::repos::mongo::MongoRepo;
 use jobs::repos::pickledb::Repo;
 use jobs::{job::JobAction, manager::JobManager, repos};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
@@ -11,11 +12,11 @@ use tokio::time::{sleep, Duration};
 #[tokio::main]
 async fn main() {
     simple_logger::init().unwrap();
-    let db_client = PickleDb::new(
-        "example.db",
-        PickleDbDumpPolicy::AutoDump,
-        SerializationMethod::Json,
-    );
+    // let db_client = PickleDb::new(
+    //     "example.db",
+    //     PickleDbDumpPolicy::AutoDump,
+    //     SerializationMethod::Json,
+    // );
     let lock_client = PickleDb::new(
         "lock.db",
         PickleDbDumpPolicy::AutoDump,
@@ -27,14 +28,21 @@ async fn main() {
         SerializationMethod::Json,
     )
     .unwrap();
-    let db_repo = repos::pickledb::Repo::new(db_client);
+
+    let client = mongodb::Client::with_uri_str("mongodb://localhost:27017")
+        .await
+        .unwrap();
+    println!("db connection ....");
+    let db = client.database("xxx_db");
+
+    let db_repo = repos::mongo::MongoRepo::new(client);
     let lock_repo = repos::pickledb::Repo::new(lock_client);
 
     let job = JobImplementer {
         db: Arc::new(Mutex::new(project_db)),
     };
 
-    let mut manager = JobManager::<Repo, Repo>::new(db_repo, lock_repo);
+    let mut manager = JobManager::<MongoRepo, Repo>::new(db_repo, lock_repo);
     manager.register(
         String::from("project-updater"),
         job.clone(),
