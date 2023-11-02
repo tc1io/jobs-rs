@@ -33,7 +33,7 @@ async fn main() {
     })
     .await?;
 
-    repo.save_state(job_name, vec![]).await?;
+    // repo.save_state(job_name, vec![]).await?;
 
     // match repo
     //     .get_job(job_name1.into())
@@ -46,20 +46,20 @@ async fn main() {
     //     }
     // }
 
-    repo.refresh_lock(JobConfig {
-        name: job_name1.into(),
-        check_interval_sec: 0,
-        state: vec![],
-        schedule: Schedule {
-            expr: "".to_string(),
-        },
-        enabled: false,
-        last_run: 0,
-        lock: LockData {
-            expires: 0,
-            version: 0,
-            ttl: Default::default(),
-        },
-    })
-    .await?;
+    // repo.refresh_lock(JobConfig {
+    //     name: job_name1.into(),
+    //     check_interval_sec: 0,
+    //     state: vec![],
+    //     schedule: Schedule {
+    //         expr: "".to_string(),
+    //     },
+    //     enabled: false,
+    //     last_run: 0,
+    //     lock: LockData {
+    //         expires: 0,
+    //         version: 0,
+    //         ttl: Default::default(),
+    //     },
+    // })
+    // .await?;
 }
