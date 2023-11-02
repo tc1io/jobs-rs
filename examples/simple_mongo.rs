@@ -4,6 +4,8 @@ use jobs::job::Schedule;
 use jobs::repos::mongo::MongoRepo;
 use jobs::repos::pickledb::Repo;
 use jobs::{job::JobAction, manager::JobManager, repos};
+use mongodb::bson::doc;
+use mongodb::{bson, Database};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -70,6 +72,14 @@ struct JobImplementer {
     db: Arc<Mutex<PickleDb>>,
 }
 
+// impl JobImplementer {
+//     fn new(db: Database) -> Self {
+//         JobImplementer {
+//             db: Arc::new(Mutex::new(db)),
+//         }
+//     }
+// }
+
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
 struct Project {
     name: String,
@@ -108,3 +118,47 @@ impl JobAction for JobImplementer {
         Ok(state)
     }
 }
+// #[async_trait]
+// impl JobAction for JobImplementer {
+//     async fn call(&mut self, _state: Vec<u8>) -> anyhow::Result<Vec<u8>> {
+//         let db = self.db.lock().unwrap();
+//         if let Err(e) = db {
+//             return Err(anyhow!(e.to_string()));
+//         }
+//         // let db = db.unwrap();
+//         let collection = db.collection("job");
+//
+//         let filter = doc! {
+//             "lifecycle_state": "DELETED"
+//         };
+//
+//         let cursor = collection.find(filter, None).await?;
+//
+//         for result in cursor {
+//             match result {
+//                 Ok(document) => {
+//                     let mut project: Project = bson::from_bson(bson::Bson::Document(document))?;
+//
+//                     // Modify the project data
+//                     if project.lifecycle_state == "DELETED" {
+//                         project.updated = "DONE".to_string();
+//                         // Update the document in the collection
+//                         let updated_document = bson::to_document(&project)?;
+//                         collection
+//                             .update_one(
+//                                 doc! { "_id": &project.id },
+//                                 doc! { "$set": updated_document },
+//                                 None,
+//                             )
+//                             .await?;
+//                         println!("{:?}", project);
+//                     }
+//                 }
+//                 Err(e) => return Err(anyhow!(e.to_string())),
+//             }
+//         }
+//
+//         let state = Vec::new();
+//         Ok(state)
+//     }
+// }
