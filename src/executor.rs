@@ -1,9 +1,11 @@
+use std::fmt::{Debug, Formatter};
 use crate::job::Schedule;
 use crate::job::{JobAction, JobConfig, JobName, JobRepo};
 use crate::lock::{LockRepo, LockStatus};
 use anyhow::{anyhow, Result};
 use chrono::Utc;
 use std::sync::Arc;
+use log::trace;
 use tokio::sync::oneshot::Receiver;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
@@ -43,6 +45,20 @@ pub enum Executor<JR, LR: LockRepo> {
     Done,
 }
 
+impl<JR,LR: LockRepo> Debug for Executor<JR,LR> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Executor::Initial { .. } =>  f.write_str("initial"),
+            Executor::Sleeping { .. } => f.write_str("sleeping"),
+            Executor::Start { .. } => f.write_str("start"),
+            Executor::TryLock { .. } => f.write_str("trylock"),
+            Executor::Run { .. } => f.write_str("run"),
+            Executor::Done => f.write_str("done"),
+        }
+
+    }
+}
+
 impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Executor<J, L> {
     pub fn new(
         instance: String,
@@ -68,6 +84,8 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
 
     pub async fn run(mut self) -> Result<()> {
         loop {
+            trace!("loop");
+            dbg!(&self);
             self = match self {
                 Self::Initial { repos, job_config } => {
                     // TODO randimize the sleep so not all instances run at same time.
@@ -104,7 +122,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                 },
                 Self::Sleeping { repos, name, d } => {
                     sleep(d).await;
-                    Self::TryLock{ repos, name}
+                    Self::TryLock { repos, name }
 
                     // tokio::select! {
                     //     _ = sleep(d) => {
@@ -157,21 +175,27 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                     name,
                     lock,
                 } => {
-                    println!("RUN");
                     let job_config = repos.job_repo.get_job(name.clone()).await?.unwrap();
-
                     let job_fut = repos.action.call(job_config.state);
-                    match job_fut.await {
-                        Ok(s) => {
+                    tokio::select! {
+                        sxx = job_fut => {
+                            match sxx {
+                             Ok(xxx) => {
                             let last_run = Utc::now().timestamp_millis();
-                            let _x = repos.job_repo.save_state(name.clone(), last_run, s).await?;
+                            let _x = repos.job_repo.save_state(name.clone(), last_run, xxx).await.unwrap();
                             Self::Sleeping {
                                 repos,
                                 name,
                                 d: Duration::from_secs(10),
                             }
+                        },
+                        Err(_) => Self::Done,
+
                         }
-                        Err(e) => Self::Done,
+                            }
+                        _ = lock => {
+                                Self::Done
+                        }
                     }
                 }
                 Self::Done => break,

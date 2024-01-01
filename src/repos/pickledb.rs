@@ -83,18 +83,29 @@ pub struct MyLock {
 impl LockRepo for Repo {
     type Lock = MyLock;
     async fn acquire_lock(&mut self, name: JobName, owner: String, ttl: Duration) -> Result<LockStatus<Self::Lock>> {
-        match self
+        dbg!("1");
+        let x = {
+
+        let mut m = self
             .db
             .read()
-            .await
-            .get::<LockData>(name.0.as_str())
+            .await;
+
+            m.get::<LockData>(name.0.as_str())
+        };
+
+        match x
         {
             Some(data) if data.expires > Utc::now().timestamp() => Ok(LockStatus::AlreadyLocked),
-            _ => {
+            Some( _ ) | None => {
+                dbg!("2");
                 let expires = Utc::now().timestamp() + ttl.as_secs() as i64;
                 let secs = ttl.as_secs() as i64;
-                let name2 = "name.clone().0.as_str()";
-                let x = self
+                let name2 = name.0.clone();
+                dbg!("2a");
+                {
+
+               let x = self
                     .db
                     .write()
                     .await
@@ -103,6 +114,10 @@ impl LockRepo for Repo {
                         expires,
                         version: 0,
                     }).unwrap();
+                }
+
+                dbg!("2.1");
+
 
                 //x.map(|| LockStatus::Acquired(MyLock{}))
                 let db = self.db.clone();
@@ -118,7 +133,7 @@ impl LockRepo for Repo {
                             db
                             .write()
                             .await
-                            .set(name2, &LockData{
+                            .set(name2.as_str(), &LockData{
                                 owner: "owner".to_owned(),
                                 expires,
                                 version: 0,
@@ -127,6 +142,7 @@ impl LockRepo for Repo {
                     }
 
                 }.boxed();
+                dbg!("3");
                 Ok(LockStatus::Acquired(MyLock{fut: f}))
             }
         }
