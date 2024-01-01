@@ -26,6 +26,7 @@ impl Repo {
 #[async_trait]
 impl JobRepo for Repo {
     async fn create_or_update_job(&mut self, job: JobConfig) -> Result<bool> {
+        //println!("create_or_update: {:?}",&job);
         self.db
             .write()
             .await
@@ -34,9 +35,12 @@ impl JobRepo for Repo {
             .map_err(|e| anyhow!(e.to_string()))?
     }
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>> {
-        Ok(self.db.write().await.get::<JobConfig>(name.as_ref()))
+        let j = self.db.write().await.get::<JobConfig>(name.as_ref());
+        //dbg!(&j);
+        Ok(j)
     }
     async fn save_state(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> Result<bool> {
+        // println!("Save state: {},{},{:?}",name,last_run,state);
         let name1 = name.clone();
         let mut job = self
             .get_job(name.into())

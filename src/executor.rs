@@ -56,7 +56,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
 pub enum State {
     Start,
     Create { job_config: JobConfig },
-    Run { job_config: JobConfig },
+    Run(JobName),
 }
 
 impl State {
@@ -92,11 +92,11 @@ impl State {
                     job_config.last_run = jc.last_run
                 }
                 ex.job_repo.create_or_update_job(job_config.clone()).await?;
-                Ok(Some(Run {
-                    job_config: ex.job_config.clone(),
-                }))
+                Ok(Some(Run(job_config.name.clone())))
             }
-            Run { job_config } => {
+            Run(name) => {
+                let job_config = ex.job_repo.get_job(name.clone()).await?.unwrap();
+
                 if job_config.clone().run_job_now()? {
                     let name = job_config.clone().name;
                     let mut lock_data = ex.lock_data.clone();
@@ -105,7 +105,7 @@ impl State {
                     if ex.lock_repo.acquire_lock(name.clone(), lock_data).await? {
                         let refresh_lock_fut = ex.lock_repo.refresh_lock(name.clone());
                         let mut action = ex.action.lock().await;
-                        let job_fut = action.call(Vec::new());
+                        let job_fut = action.call(job_config.state);
                         tokio::select! {
                                 refreshed = refresh_lock_fut => {
                                 match refreshed {

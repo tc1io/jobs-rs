@@ -25,8 +25,7 @@ async fn main() {
         "project.db",
         PickleDbDumpPolicy::AutoDump,
         SerializationMethod::Json,
-    )
-    .unwrap();
+    ).unwrap();
     let db_repo = repos::pickledb::Repo::new(db_client);
     let lock_repo = repos::pickledb::Repo::new(lock_client);
 
@@ -39,7 +38,7 @@ async fn main() {
         String::from("project-updater"),
         job.clone(),
         Schedule {
-            expr: "0 * * * * *".to_string(),
+            expr: "* * * * * *".to_string(),
         },
     );
     // manager.register(
@@ -55,7 +54,7 @@ async fn main() {
     //     .stop_by_name(String::from("project-updater"))
     //     .await
     //     .unwrap();
-    sleep(Duration::from_secs(20)).await;
+    sleep(Duration::from_secs(300)).await;
 }
 
 #[derive(Clone)]
@@ -73,31 +72,40 @@ struct Project {
 
 #[async_trait]
 impl JobAction for JobImplementer {
-    async fn call(&mut self, _state: Vec<u8>) -> anyhow::Result<Vec<u8>> {
-        let all_data = self
-            .db
-            .lock()
-            .map_err(|e| anyhow!(e.to_string()))?
-            .get_all();
-        for a in all_data {
-            let maybe_project = self
-                .db
-                .lock()
-                .map_err(|e| anyhow!(e.to_string()))?
-                .get::<Project>(&a);
+    async fn call(&mut self, state: Vec<u8>) -> anyhow::Result<Vec<u8>> {
+        let s:String = if state.len() == 0 {
+            String::default()
+        } else {
+            String::from_utf8(state).unwrap()
+        };
+        println!("IN: {}",&s);
 
-            if let Some(mut project) = maybe_project {
-                if project.lifecycle_state == "DELETED" {
-                    project.updated = "DONE".to_string();
-                    self.db
-                        .lock()
-                        .map_err(|e| anyhow!(e.to_string()))?
-                        .set(format!("{:?}", project.id.clone()).as_str(), &project)?;
-                    println!("{:?}", project);
-                }
-            }
-        }
-        let state = Vec::new();
+        let s = format!("{}.foo",s);
+
+        // let all_data = self
+        //     .db
+        //     .lock()
+        //     .map_err(|e| anyhow!(e.to_string()))?
+        //     .get_all();
+        // for a in all_data {
+        //     let maybe_project = self
+        //         .db
+        //         .lock()
+        //         .map_err(|e| anyhow!(e.to_string()))?
+        //         .get::<Project>(&a);
+        //
+        //     if let Some(mut project) = maybe_project {
+        //         if project.lifecycle_state == "DELETED" {
+        //             project.updated = "DONE".to_string();
+        //             self.db
+        //                 .lock()
+        //                 .map_err(|e| anyhow!(e.to_string()))?
+        //                 .set(format!("{:?}", project.id.clone()).as_str(), &project)?;
+        //             println!("{:?}", project);
+        //         }
+        //     }
+        // }
+        let state = Vec::from(s.as_bytes());
         Ok(state)
     }
 }
