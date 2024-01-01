@@ -17,6 +17,6 @@ pub enum LockStatus<L> {
 
 #[async_trait]
 pub trait LockRepo {
-    type Lock: Future<Output=Result<()>>;
+    type Lock: Future<Output=Result<()>> + Send;
     async fn acquire_lock(&mut self, name: JobName, owner: String, ttl: time::Duration) -> Result<LockStatus<Self::Lock>>;
 }

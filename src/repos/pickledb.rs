@@ -75,13 +75,13 @@ struct LockData {
 }
 
 
-struct MyLock<'a> {
-    fut: BoxFuture<'a,Result<()>>
+pub struct MyLock {
+    fut: BoxFuture<'static,Result<()>>
 }
 
 #[async_trait]
 impl LockRepo for Repo {
-    type Lock = MyLock<'static>;
+    type Lock = MyLock;
     async fn acquire_lock(&mut self, name: JobName, owner: String, ttl: Duration) -> Result<LockStatus<Self::Lock>> {
         match self
             .db
@@ -105,7 +105,8 @@ impl LockRepo for Repo {
                     }).unwrap();
 
                 //x.map(|| LockStatus::Acquired(MyLock{}))
-                let f = async {
+                let db = self.db.clone();
+                let f = async move {
 
                     loop {
                         println!("Loop lock");
@@ -114,8 +115,7 @@ impl LockRepo for Repo {
                         //let expires = Utc::now().timestamp() + secs;
                         let expires = Utc::now().timestamp() + 10;
 
-                        self
-                            .db
+                            db
                             .write()
                             .await
                             .set(name2, &LockData{
