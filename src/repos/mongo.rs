@@ -1,9 +1,8 @@
 use crate::job::{JobConfig, JobName, JobRepo};
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use mongodb::bson::{doc, Document};
-use mongodb::options::IndexOptions;
-use mongodb::{Client, IndexModel};
+use mongodb::bson::doc;
+use mongodb::Client;
 
 #[derive(Clone)]
 pub struct MongoRepo {
@@ -41,13 +40,7 @@ impl JobRepo for MongoRepo {
         Ok(jc)
     }
 
-    async fn save_state(
-        &mut self,
-        name: JobName,
-        last_run: i64,
-        state: Vec<u8>,
-    ) -> anyhow::Result<bool> {
-        let name1 = name.clone();
+    async fn save_state(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> Result<bool> {
         let mut job = self
             .get_job(name.into())
             .await
@@ -57,7 +50,6 @@ impl JobRepo for MongoRepo {
         job.state = state;
         job.last_run = last_run;
 
-        let c = self.client.clone();
         self.client
             .clone()
             .database("example")
