@@ -59,12 +59,12 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             let job_repo = self.job_repo.clone();
             let lock_repo = self.lock_repo.clone();
             let name = job.name.clone();
-            let action = job.action.clone();
+            let action = job.action.take().unwrap();
             let schedule = job.schedule.clone();
 
             job.status = Running(tx);
-            let mut ex = Executor::new(name.clone(), action, schedule, job_repo, lock_repo, rx);
             tokio::spawn(async move {
+                let mut ex = Executor::new("todo".to_owned(),name.clone(), action, schedule, job_repo, lock_repo, rx);
                 match ex.run().await {
                     Ok(_) => {}
                     Err(e) => warn!("{:?}", e),

@@ -36,7 +36,8 @@ pub enum Status {
 
 pub struct Job {
     pub name: JobName,
-    pub action: Arc<Mutex<dyn JobAction + Send + Sync>>,
+    //pub action: Arc<Mutex<dyn JobAction + Send + Sync>>,
+    pub action: Option<Box<dyn JobAction + Send + Sync>>,
     pub schedule: Schedule,
     pub status: Status,
 }
@@ -67,7 +68,7 @@ impl JobConfig {
             last_run: Default::default(),
         }
     }
-    pub fn run_job_now(self) -> Result<bool> {
+    pub fn run_job_now(&self) -> Result<bool> {
         if !self.enabled {
             return Ok(false);
         }
@@ -101,7 +102,8 @@ impl Job {
     ) -> Self {
         Job {
             name: JobName(name.into()),
-            action: Arc::new(Mutex::new(action)),
+            //action: Arc::new(Mutex::new(action)),
+            action: Some(Box::new(action)),
             schedule,
             status: Registered,
         }

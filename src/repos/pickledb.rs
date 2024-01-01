@@ -1,14 +1,22 @@
+use std::future::Future;
 use crate::job::{JobConfig, JobName, JobRepo};
-use crate::lock::{LockData, LockRepo};
+use crate::lock::{LockRepo, LockStatus};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use pickledb::PickleDb;
-use std::ops::Add;
+use std::ops::{Add, Deref};
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time;
 use std::time::Duration;
+use futures::future::BoxFuture;
+use futures::FutureExt;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tokio::time::interval;
+use tokio::time::{interval, sleep};
+
 
 #[derive(Clone)]
 pub struct Repo {
@@ -59,55 +67,87 @@ impl JobRepo for Repo {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+struct LockData {
+    pub owner: String,
+    pub expires: i64,
+    pub version: i8,
+}
+
+
+struct MyLock<'a> {
+    fut: BoxFuture<'a,Result<()>>
+}
+
 #[async_trait]
 impl LockRepo for Repo {
-    async fn acquire_lock(&mut self, name: JobName, lock_data: LockData) -> Result<bool> {
-        if self
+    type Lock = MyLock<'static>;
+    async fn acquire_lock(&mut self, name: JobName, owner: String, ttl: Duration) -> Result<LockStatus<Self::Lock>> {
+        match self
             .db
             .read()
             .await
             .get::<LockData>(name.0.as_str())
-            .map_or_else(
-                || true,
-                |data| data.expires < Utc::now().timestamp_millis() as u64,
-            )
         {
-            return self
-                .db
-                .write()
-                .await
-                .set(name.0.as_str(), &lock_data)
-                .map(|_| Ok(true))
-                .map_err(|e| anyhow!(e.to_string()))?;
-        }
-        Ok(false)
-    }
-    async fn refresh_lock(&mut self, name: JobName) -> Result<bool> {
-        let mut lock_data = self
-            .db
-            .read()
-            .await
-            .get::<LockData>(name.as_ref())
-            .ok_or(anyhow!("lock not found or lock expired"))?;
-        let mut refresh_interval = interval(Duration::from_secs(lock_data.ttl.as_secs()) / 2);
-        refresh_interval.tick().await; // The first tick completes immediately
-        loop {
-            if lock_data.expires < Utc::now().timestamp_millis() as u64 {
-                return Err(anyhow!("lock expired"));
-            } else {
-                lock_data.expires = Utc::now()
-                    .timestamp_millis()
-                    .add(lock_data.ttl.as_millis() as i64)
-                    as u64;
-                lock_data.version = lock_data.version.add(1);
-                self.db
+            Some(data) if data.expires > Utc::now().timestamp() => Ok(LockStatus::AlreadyLocked),
+            _ => {
+                let expires = Utc::now().timestamp() + ttl.as_secs() as i64;
+                let secs = ttl.as_secs() as i64;
+                let name2 = "name.clone().0.as_str()";
+                let x = self
+                    .db
                     .write()
                     .await
-                    .set(name.0.as_str(), &lock_data)
-                    .map_err(|e| anyhow!(e.to_string()))?;
-                println!("lock refreshed");
-                refresh_interval.tick().await;
+                    .set(name.0.as_str(), &LockData{
+                        owner,
+                        expires,
+                        version: 0,
+                    }).unwrap();
+
+                //x.map(|| LockStatus::Acquired(MyLock{}))
+                let f = async {
+
+                    loop {
+                        println!("Loop lock");
+                        sleep(Duration::from_secs(10)).await;
+
+                        //let expires = Utc::now().timestamp() + secs;
+                        let expires = Utc::now().timestamp() + 10;
+
+                        self
+                            .db
+                            .write()
+                            .await
+                            .set(name2, &LockData{
+                                owner: "owner".to_owned(),
+                                expires,
+                                version: 0,
+                            }).unwrap();
+
+                    }
+
+                }.boxed();
+                Ok(LockStatus::Acquired(MyLock{fut: f}))
             }
         }
+    }
+}
+
+impl Drop for MyLock {
+    fn drop(&mut self) {
+        println!("DROPING LOCK Future NOW");
+        //self.fut.drop();
+        println!("DROPPED LOCK Future NOW");
+    }
+}
+
+impl Future for MyLock {
+
+    type Output = Result<()>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        println!("POLL LOCK NOW");
+        //self.fut.deref().poll(cx)
+        Poll::Pending
     }
 }
