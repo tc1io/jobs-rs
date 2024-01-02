@@ -7,7 +7,6 @@ use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tokio::time::{sleep, Duration};
-use jobs::Error;
 use jobs::Result;
 
 #[tokio::main]
@@ -103,6 +102,16 @@ impl JobAction for JobImplementer {
         //         }
         //     }
         // }
+        sleep(Duration::from_secs(1)).await;
+        dbg!("work-1");
+        sleep(Duration::from_secs(2)).await;
+        dbg!("work-2");
+        sleep(Duration::from_secs(3)).await;
+        dbg!("work-3");
+        sleep(Duration::from_secs(4)).await;
+        dbg!("work-4");
+        sleep(Duration::from_secs(5)).await;
+        dbg!("work-5");
         let state = Vec::from(s.as_bytes());
         Ok(state)
     }
