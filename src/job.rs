@@ -1,5 +1,5 @@
 use crate::job::Status::{Registered, Running};
-use anyhow::Result;
+use crate::{Error,Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cron::Schedule as CronSchedule;
@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Display;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
+use log::trace;
 use tokio::sync::oneshot::Sender;
-use tokio::sync::Mutex;
+use crate::Error::InvalidCronExpression;
 
 #[async_trait]
 pub trait JobAction {
@@ -36,7 +36,6 @@ pub enum Status {
 
 pub struct Job {
     pub name: JobName,
-    //pub action: Arc<Mutex<dyn JobAction + Send + Sync>>,
     pub action: Option<Box<dyn JobAction + Send + Sync>>,
     pub schedule: Schedule,
     pub status: Status,
@@ -70,21 +69,30 @@ impl JobConfig {
     }
     pub fn run_job_now(&self) -> Result<bool> {
         if !self.enabled {
+            trace!("job not enabled");
             return Ok(false);
         }
         if self.last_run.eq(&0) {
+            trace!("last run is 0");
             return Ok(true);
         }
         let last_run =
             DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_millis(self.last_run as u64));
-        let schedule = CronSchedule::from_str(self.schedule.expr.as_str())?;
+        trace!("last run is {}",last_run);
+        let schedule = CronSchedule::from_str(self.schedule.expr.as_str()).map_err(|e| Error::InvalidCronExpression {
+            expression: self.schedule.expr.clone(),
+            msg: e.to_string(),
+        })?;
         let next_scheduled_run = schedule
             .after(&last_run)
             .next()
             .map_or_else(|| 0, |t| t.timestamp_millis());
+        trace!("next schedule run is {}",next_scheduled_run);
         if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
+            trace!("run is due");
             return Ok(true);
         }
+        trace!("run is not due");
         Ok(false)
     }
 }
@@ -120,5 +128,5 @@ impl Job {
 pub trait JobRepo {
     async fn create_or_update_job(&mut self, job: JobConfig) -> Result<bool>;
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>>;
-    async fn save_state(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> Result<bool>;
+    async fn save_state(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> Result<()>;
 }

@@ -1,10 +1,12 @@
+use std::time::Duration;
 use crate::executor::Executor;
 use crate::job::Status::Running;
 use crate::job::{Job, JobAction, JobName, JobRepo, Schedule};
 use crate::lock::LockRepo;
-use anyhow::{anyhow, Result};
 use log::{info, trace, warn};
+use rand::Rng;
 use tokio::sync::oneshot;
+use crate::{Error,Result};
 
 /// JobManager holds the job + lock repo along with the list of jobs
 pub struct JobManager<J, L>
@@ -12,6 +14,7 @@ where
     J: JobRepo + Sync + Send + Clone,
     L: LockRepo + Sync + Send + Clone,
 {
+    instance: String,
     job_repo: J,
     lock_repo: L,
     jobs: Vec<Job>,
@@ -20,8 +23,9 @@ where
 impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sync + 'static>
     JobManager<J, L>
 {
-    pub fn new(job_repo: J, lock_repo: L) -> Self {
+    pub fn new(instance: String, job_repo: J, lock_repo: L) -> Self {
         JobManager {
+            instance,
             job_repo: job_repo.clone(),
             lock_repo: lock_repo.clone(),
             jobs: Vec::new(),
@@ -45,7 +49,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
     ) {
         self.jobs
             .push(Job::new(JobName(name.clone().into()), action, schedule)); // TODO: add validation during registration??
-        info!("job: {:?} registered", name);
+        trace!("job: {:?} registered", name);
     }
 
     /// start_all will spawn the jobs and run the job for ever until the job is stopped or aborted
@@ -63,35 +67,38 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             let schedule = job.schedule.clone();
 
             job.status = Running(tx);
+            let instance = self.instance.clone();
+            let mut rng = rand::thread_rng();
+            let delay = Duration::from_millis(rng.gen_range(10..100));
             tokio::spawn(async move {
-                trace!("start executor for job");
-                let mut ex = Executor::new("todo".to_owned(),name.clone(), action, schedule, job_repo, lock_repo, rx);
+                trace!("start executor for job {}",&name);
+                let mut ex = Executor::new(instance,name.clone(), action, schedule, job_repo, lock_repo, rx,delay);
                 match ex.run().await {
-                    Ok(_) => {}
-                    Err(e) => warn!("{:?}", e),
+                    Ok(()) => trace!("job {} stopped",name),
+                    Err(e) => warn!("job {} stopped with an error: {:?}", name,e),
                 };
             });
         }
         Ok(())
     }
-    /// stop_by_name will stop the job which is started as part of start_all
-    pub async fn stop_by_name(self, name: String) -> Result<()> {
-        for job in self
-            .jobs
-            .into_iter()
-            .filter(|j| j.name == JobName(name.clone().into()))
-        {
-            return match job.status {
-                Running(s) => {
-                    info!("received stop signal. Stopping job: {:?}", name.clone());
-                    let _xx = s
-                        .send(())
-                        .map_err(|()| anyhow!("send cancel signal failed"))?;
-                    Ok(())
-                }
-                _ => Ok(()),
-            };
-        }
-        Ok(())
-    }
+    // /// stop_by_name will stop the job which is started as part of start_all
+    // pub async fn stop_by_name(self, name: String) -> Result<()> {
+    //     for job in self
+    //         .jobs
+    //         .into_iter()
+    //         .filter(|j| j.name == JobName(name.clone().into()))
+    //     {
+    //         return match job.status {
+    //             Running(s) => {
+    //                 info!("received stop signal. Stopping job: {:?}", name.clone());
+    //                 let _xx = s
+    //                     .send(())
+    //                     .map_err(|()| anyhow!("send cancel signal failed"))?;
+    //                 Ok(())
+    //             }
+    //             _ => Ok(()),
+    //         };
+    //     }
+    //     Ok(())
+    // }
 }

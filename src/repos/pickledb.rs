@@ -1,21 +1,20 @@
 use std::future::Future;
 use crate::job::{JobConfig, JobName, JobRepo};
 use crate::lock::{LockRepo, LockStatus};
-use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use pickledb::PickleDb;
-use std::ops::{Add, Deref};
+use std::ops::Add;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::time;
 use std::time::Duration;
 use futures::future::BoxFuture;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tokio::time::{interval, sleep};
+use tokio::time::sleep;
+use crate::{Error,Result};
 
 
 #[derive(Clone)]
@@ -34,36 +33,36 @@ impl Repo {
 #[async_trait]
 impl JobRepo for Repo {
     async fn create_or_update_job(&mut self, job: JobConfig) -> Result<bool> {
-        //println!("create_or_update: {:?}",&job);
         self.db
             .write()
             .await
             .set(job.name.as_ref(), &job)
             .map(|_| Ok(true))
-            .map_err(|e| anyhow!(e.to_string()))?
+            .map_err(|e| Error::Repo(e.to_string()))?
     }
     async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>> {
         let j = self.db.write().await.get::<JobConfig>(name.as_ref());
         //dbg!(&j);
         Ok(j)
     }
-    async fn save_state(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> Result<bool> {
+    async fn save_state(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> Result<()> {
         // println!("Save state: {},{},{:?}",name,last_run,state);
         let name1 = name.clone();
+        let name2 = name.clone();
         let mut job = self
             .get_job(name.into())
             .await
-            .map_err(|e| anyhow!(e))?
-            .ok_or(anyhow!("job not found"))?;
+            .map_err(|e| Error::Repo(e.to_string()))?
+            .ok_or(Error::JobNotFound(name1))?;
 
         job.state = state;
         job.last_run = last_run;
         self.db
             .write()
             .await
-            .set(name1.as_ref(), &job)
-            .map_err(|e| anyhow!(e.to_string()))?;
-        Ok(true)
+            .set(name2.as_ref(), &job)
+            .map_err(|e| Error::Repo(e.to_string()))?;
+        Ok(())
     }
 }
 

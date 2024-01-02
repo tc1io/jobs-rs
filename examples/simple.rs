@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use std::process;
 use async_trait::async_trait;
 use jobs::job::Schedule;
 use jobs::repos::pickledb::Repo;
@@ -7,6 +7,8 @@ use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tokio::time::{sleep, Duration};
+use jobs::Error;
+use jobs::Result;
 
 #[tokio::main]
 async fn main() {
@@ -33,21 +35,17 @@ async fn main() {
         db: Arc::new(Mutex::new(project_db)),
     };
 
-    let mut manager = JobManager::<Repo, Repo>::new(db_repo, lock_repo);
+
+    let pid = process::id();
+
+    let mut manager = JobManager::<Repo, Repo>::new(pid.to_string(),db_repo, lock_repo);
     manager.register(
         String::from("project-updater"),
         job.clone(),
         Schedule {
-            expr: "* * * * * *".to_string(),
+            expr: "0 * * * * *".to_string(),
         },
     );
-    // manager.register(
-    //     String::from("project-cleaner"),
-    //     job.clone(),
-    //     Schedule {
-    //         expr: "0 * * * * *".to_string(),
-    //     },
-    // );
     let _ = manager.start_all().await.unwrap();
     sleep(Duration::from_secs(4)).await;
     // manager
@@ -72,7 +70,7 @@ struct Project {
 
 #[async_trait]
 impl JobAction for JobImplementer {
-    async fn call(&mut self, state: Vec<u8>) -> anyhow::Result<Vec<u8>> {
+    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>> {
         let s:String = if state.len() == 0 {
             String::default()
         } else {

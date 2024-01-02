@@ -1,17 +1,11 @@
 use std::future::Future;
 use std::time;
-use anyhow::Result;
 use async_trait::async_trait;
-
 use crate::job::JobName;
+use crate::{Result};
 
-//#[async_trait]
-//pub trait Lock {
-//    async fn unlock() -> Result<()>;
-//}
-
-pub enum LockStatus<L> {
-    Acquired(L),
+pub enum LockStatus<LOCK> {
+    Acquired(LOCK),
     AlreadyLocked
 }
 
