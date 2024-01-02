@@ -128,19 +128,19 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                     },
                 },
                 Self::Sleeping { repos, name, d } => {
-                    // sleep(d).await;
-                    // Self::TryLock { repos, name }
+                    sleep(d).await;
+                    Self::TryLock { repos, name }
 
-                    tokio::select! {
-                        _ = sleep(d) => {
-                            println!("do_stuff_async() completed first");
-                                Self::TryLock{ repos, name}
-                        }
-                        _ = repos.cancel_signal_rx => {
-                            println!("more_async_work() completed first");
-                                Self::Done
-                        }
-                    }
+                    // tokio::select! {
+                    //     _ = sleep(d) => {
+                    //         println!("do_stuff_async() completed first");
+                    //             Self::TryLock{ repos, name}
+                    //     }
+                    //     _ = repos.cancel_signal_rx => {
+                    //         println!("more_async_work() completed first");
+                    //             Self::Done
+                    //     }
+                    // }
                 }
 
                 //     println!("START");

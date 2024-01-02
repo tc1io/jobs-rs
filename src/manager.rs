@@ -73,7 +73,7 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
             tokio::spawn(async move {
                 trace!("start executor for job {}",&name);
                 let mut ex = Executor::new(instance,name.clone(), action, schedule, job_repo, lock_repo, rx,delay);
-                match ex.new().await {
+                match ex.run().await {
                     Ok(()) => trace!("job {} stopped",name),
                     Err(e) => warn!("job {} stopped with an error: {:?}", name,e),
                 };
