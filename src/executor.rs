@@ -18,7 +18,7 @@ struct Repos<JR, LR> {
 }
 
 pub enum Executor<JR, LR: LockRepo> {
-    Initial {
+    InitialDelay {
         repos: Repos<JR, LR>,
         job_config: JobConfig,
         delay: Duration,
@@ -47,7 +47,7 @@ pub enum Executor<JR, LR: LockRepo> {
 impl<JR,LR: LockRepo> Debug for Executor<JR,LR> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Executor::Initial { .. } =>  f.write_str("------------------------------------ initial"),
+            Executor::InitialDelay { .. } =>  f.write_str("------------------------------------ initial"),
             Executor::Sleeping { .. } => f.write_str("------------------------------------ sleeping"),
             Executor::Start { .. } => f.write_str("------------------------------------ start"),
             Executor::TryLock { .. } => f.write_str("------------------------------------ trylock"),
@@ -69,7 +69,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
         cancel_signal_rx: Receiver<()>,
         delay: Duration,
     ) -> Self {
-        Executor::Initial {
+        Executor::InitialDelay {
             repos: Repos {
                 instance,
                 job_repo,
@@ -87,7 +87,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
             trace!("loop");
             dbg!(&self);
             self = match self {
-                Self::Initial { repos, job_config, delay } => {
+                Self::InitialDelay { repos, job_config, delay } => {
                     sleep(delay).await;
                     Self::Start { repos, job_config }
                 }
@@ -95,7 +95,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                     mut repos,
                     job_config,
                 } => match repos.job_repo.get_job(job_config.name.clone().into()).await {
-                    Err(_) => todo!(), //Self::Start { repos, job_config },
+                    Err(_) => todo!(), //TODO error sleep state  Self::Start { repos, job_config },
                     Ok(None) => {
                         match repos
                             .job_repo
@@ -128,19 +128,19 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                     },
                 },
                 Self::Sleeping { repos, name, d } => {
-                    sleep(d).await;
-                    Self::TryLock { repos, name }
+                    // sleep(d).await;
+                    // Self::TryLock { repos, name }
 
-                    // tokio::select! {
-                    //     _ = sleep(d) => {
-                    //         println!("do_stuff_async() completed first");
-                    //             Self::TryLock{ repos, name}
-                    //     }
-                    //     _ = repos.cancel_signal_rx => {
-                    //         println!("more_async_work() completed first");
-                    //             Self::Done
-                    //     }
-                    // }
+                    tokio::select! {
+                        _ = sleep(d) => {
+                            println!("do_stuff_async() completed first");
+                                Self::TryLock{ repos, name}
+                        }
+                        _ = repos.cancel_signal_rx => {
+                            println!("more_async_work() completed first");
+                                Self::Done
+                        }
+                    }
                 }
 
                 //     println!("START");
@@ -204,6 +204,8 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                         _ = lock => {
                                 Self::Done
                         }
+                            // TODO Unlock
+
                     }
                     } else {
                         Self::Sleeping {
