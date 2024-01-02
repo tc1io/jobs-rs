@@ -13,7 +13,7 @@ struct Repos<JR, LR> {
     instance: String,
     job_repo: JR,
     lock_repo: LR,
-    cancel_signal_rx: Receiver<()>,
+    cancel_signal_rx: Option<Receiver<()>>,
     action: Box<dyn JobAction + Send + Sync>,
 }
 
@@ -74,7 +74,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                 instance,
                 job_repo,
                 lock_repo,
-                cancel_signal_rx,
+                cancel_signal_rx: Some(cancel_signal_rx),
                 action,
             },
             job_config: JobConfig::new(job_name, schedule),
@@ -127,20 +127,29 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                         }
                     },
                 },
-                Self::Sleeping { repos, name, d } => {
-                    sleep(d).await;
-                    Self::TryLock { repos, name }
+                Self::Sleeping { mut repos, name, d } => {
+                    // sleep(d).await;
+                    // Self::TryLock { repos, name }
 
-                    // tokio::select! {
-                    //     _ = sleep(d) => {
-                    //         println!("do_stuff_async() completed first");
-                    //             Self::TryLock{ repos, name}
-                    //     }
-                    //     _ = repos.cancel_signal_rx => {
-                    //         println!("more_async_work() completed first");
-                    //             Self::Done
-                    //     }
-                    // }
+                    let mut cancel_signal_rx = repos.cancel_signal_rx.take().unwrap();
+
+                    let x = tokio::select! {
+                        _ = sleep(d) => {
+                            println!("do_stuff_async() completed first");
+                            true
+                        }
+                        _ = &mut cancel_signal_rx => {
+                            println!("more_async_work() completed first");
+                            false
+                        }
+                    };
+                    if x {
+                        repos.cancel_signal_rx = Some(cancel_signal_rx);
+                        Self::TryLock { repos, name }
+                    } else {
+                        Self::Done
+                    }
+
                 }
 
                 //     println!("START");

@@ -47,10 +47,10 @@ async fn main() {
     );
     let _ = manager.start_all().await.unwrap();
     sleep(Duration::from_secs(4)).await;
-    // manager
-    //     .stop_by_name(String::from("project-updater"))
-    //     .await
-    //     .unwrap();
+    manager
+        .stop_by_name(String::from("project-updater"))
+        .await
+        .unwrap();
     sleep(Duration::from_secs(300)).await;
 }
 

@@ -81,24 +81,24 @@ impl<J: JobRepo + Clone + Send + Sync + 'static, L: LockRepo + Clone + Send + Sy
         }
         Ok(())
     }
-    // /// stop_by_name will stop the job which is started as part of start_all
-    // pub async fn stop_by_name(self, name: String) -> Result<()> {
-    //     for job in self
-    //         .jobs
-    //         .into_iter()
-    //         .filter(|j| j.name == JobName(name.clone().into()))
-    //     {
-    //         return match job.status {
-    //             Running(s) => {
-    //                 info!("received stop signal. Stopping job: {:?}", name.clone());
-    //                 let _xx = s
-    //                     .send(())
-    //                     .map_err(|()| anyhow!("send cancel signal failed"))?;
-    //                 Ok(())
-    //             }
-    //             _ => Ok(()),
-    //         };
-    //     }
-    //     Ok(())
-    // }
+    /// stop_by_name will stop the job which is started as part of start_all
+    pub async fn stop_by_name(self, name: String) -> Result<()> {
+        for job in self
+            .jobs
+            .into_iter()
+            .filter(|j| j.name == JobName(name.clone().into()))
+        {
+            return match job.status {
+                Running(s) => {
+                    info!("received stop signal. Stopping job: {:?}", name.clone());
+                    let _xx = s
+                        .send(())
+                        .map_err(|()| Error::CancelFailed(name))?;
+                    Ok(())
+                }
+                _ => Ok(()),
+            };
+        }
+        Ok(())
+    }
 }

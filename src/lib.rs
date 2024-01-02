@@ -23,6 +23,8 @@ pub enum Error {
     JobNotFound(JobName),
     #[error("Repository error: {0}")]
     Repo(String),
+    #[error("canceling job {0} failed")]
+    CancelFailed(String),
 
     #[error("TODO")]
     TODO,
