@@ -51,7 +51,7 @@ async fn main() {
         .stop_by_name(String::from("project-updater"))
         .await
         .unwrap();
-    sleep(Duration::from_secs(300)).await;
+    sleep(Duration::from_secs(30)).await;
 }
 
 #[derive(Clone)]

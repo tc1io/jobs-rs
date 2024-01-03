@@ -1,6 +1,7 @@
 use crate::job::JobName;
 use crate::lock::{LockRepo, LockStatus};
 use crate::repos::pickledb::Repo;
+use crate::Error;
 use async_trait::async_trait;
 use chrono::Utc;
 use futures::future::BoxFuture;
@@ -11,7 +12,6 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::time::sleep;
-use crate::Error;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct LockData {
@@ -102,33 +102,11 @@ impl LockRepo for Repo {
     }
 
     async fn release_lock(&mut self, name: JobName) -> crate::Result<bool> {
-        // let x = {
-        //     let mut m = self.db.read().await;
-        //
-        //     m.get::<LockData>(name.0.as_str())
-        // };
-        // match x {
-        //     None => Ok(()),
-        //     Some(data) => {
-        //         {
-                    self
-                        .db
-                        .write()
-                        .await
-                        .rem(name.0.as_str())
-                        .map_err(|e| Error::Repo(e.to_string()) )
-                        // .set(
-                        //     name.0.as_str(),
-                        //     &LockData {
-                        //         owner,
-                        //         expires,
-                        //         version: 0,
-                        //     },
-                        // )
-                // }
-
-        //     }
-        // }
+        self.db
+            .write()
+            .await
+            .rem(name.0.as_str())
+            .map_err(|e| Error::Repo(e.to_string()))
     }
 }
 

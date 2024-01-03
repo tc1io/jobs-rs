@@ -1,10 +1,9 @@
 use crate::job::Schedule;
 use crate::job::{JobAction, JobConfig, JobName, JobRepo};
 use crate::lock::{LockRepo, LockStatus};
-use crate::{Error, Result};
+use crate::Result;
 use chrono::Utc;
 use log::trace;
-use rand::Rng;
 use std::fmt::{Debug, Formatter};
 use tokio::sync::oneshot::Receiver;
 use tokio::time::{sleep, Duration};
@@ -134,9 +133,6 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                     }
                 },
                 Self::Sleeping { mut repos, name, d } => {
-                    // sleep(d).await;
-                    // Self::TryLock { repos, name }
-
                     let mut cancel_signal_rx = repos.cancel_signal_rx.take().unwrap();
 
                     tokio::select! {
@@ -210,14 +206,20 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                                 }
                             }
                             _ = lock => {
+                                repos
+                                .lock_repo
+                                .release_lock(name.clone())
+                                .await;
                                 Self::Done
                             }
                             _ = &mut cancel_signal_rx => {
                                 println!("more_async_work() completed first");
+                                repos
+                                .lock_repo
+                                .release_lock(name.clone())
+                                .await;
                                 Self::Done
                             }
-                                // TODO Unlock
-
                         }
                     } else {
                         Self::Sleeping {
@@ -227,9 +229,7 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                         }
                     }
                 }
-                Self::Done => {
-                    break
-                },
+                Self::Done => break,
             }
         }
         Ok(())
