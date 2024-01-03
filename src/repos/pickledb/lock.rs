@@ -11,6 +11,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::time::sleep;
+use crate::Error;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct LockData {
@@ -45,7 +46,7 @@ impl LockRepo for Repo {
             Some(_) | None => {
                 dbg!("2");
                 let expires = Utc::now().timestamp() + ttl.as_secs() as i64;
-                let secs = ttl.as_secs() as i64;
+                // let secs = ttl.as_secs() as i64;
                 let name2 = name.0.clone();
                 dbg!("2a");
                 {
@@ -98,6 +99,36 @@ impl LockRepo for Repo {
                 }))
             }
         }
+    }
+
+    async fn release_lock(&mut self, name: JobName) -> crate::Result<bool> {
+        // let x = {
+        //     let mut m = self.db.read().await;
+        //
+        //     m.get::<LockData>(name.0.as_str())
+        // };
+        // match x {
+        //     None => Ok(()),
+        //     Some(data) => {
+        //         {
+                    self
+                        .db
+                        .write()
+                        .await
+                        .rem(name.0.as_str())
+                        .map_err(|e| Error::Repo(e.to_string()) )
+                        // .set(
+                        //     name.0.as_str(),
+                        //     &LockData {
+                        //         owner,
+                        //         expires,
+                        //         version: 0,
+                        //     },
+                        // )
+                // }
+
+        //     }
+        // }
     }
 }
 

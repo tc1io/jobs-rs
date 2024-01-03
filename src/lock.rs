@@ -13,4 +13,5 @@ pub enum LockStatus<LOCK> {
 pub trait LockRepo {
     type Lock: Future<Output=Result<()>> + Send;
     async fn acquire_lock(&mut self, name: JobName, owner: String, ttl: time::Duration) -> Result<LockStatus<Self::Lock>>;
+    async fn release_lock(&mut self, name: JobName) -> Result<bool>;
 }

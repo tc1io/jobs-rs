@@ -227,7 +227,9 @@ impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Execut
                         }
                     }
                 }
-                Self::Done => break,
+                Self::Done => {
+                    break
+                },
             }
         }
         Ok(())
