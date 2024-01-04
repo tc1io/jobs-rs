@@ -29,35 +29,6 @@ impl Display for JobName {
     }
 }
 
-#[async_trait]
-pub trait JobAction {
-    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>>;
-}
-
-#[derive(Debug)]
-pub(crate) enum Status {
-    Registered,
-    Suspended,
-    Running(Sender<()>),
-}
-
-pub struct Job {
-    pub data: JobConfig,
-    pub action: Option<Box<dyn JobAction + Send + Sync>>,
-    pub status: Status,
-}
-
-#[derive(Clone, Debug)]
-pub struct JobData {
-    pub name: JobName,
-    pub check_interval: Duration,
-    pub lock_ttl: Duration,
-    pub state: Vec<u8>,
-    pub schedule: Schedule,
-    pub enabled: bool,
-    pub last_run: DateTime<Utc>,
-}
-
 #[derive(Clone)]
 pub struct JobConfig {
     pub name: JobName,
@@ -87,18 +58,15 @@ impl JobConfig {
     }
 }
 
-impl From<JobConfig> for JobData {
-    fn from(value: JobConfig) -> Self {
-        Self {
-            name: value.name,
-            check_interval: value.check_interval,
-            lock_ttl: value.lock_ttl,
-            state: Vec::default(),
-            schedule: value.schedule,
-            enabled: value.enabled,
-            last_run: DateTime::default(),
-        }
-    }
+#[derive(Clone, Debug)]
+pub struct JobData {
+    pub name: JobName,
+    pub check_interval: Duration,
+    pub lock_ttl: Duration,
+    pub state: Vec<u8>,
+    pub schedule: Schedule,
+    pub enabled: bool,
+    pub last_run: DateTime<Utc>,
 }
 
 impl JobData {
@@ -124,6 +92,37 @@ impl JobData {
     }
 }
 
+impl From<JobConfig> for JobData {
+    fn from(value: JobConfig) -> Self {
+        Self {
+            name: value.name,
+            check_interval: value.check_interval,
+            lock_ttl: value.lock_ttl,
+            state: Vec::default(),
+            schedule: value.schedule,
+            enabled: value.enabled,
+            last_run: DateTime::default(),
+        }
+    }
+}
+
+#[async_trait]
+pub trait JobAction {
+    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>>;
+}
+
+#[derive(Debug)]
+pub(crate) enum Status {
+    Registered,
+    Suspended,
+    Running(Sender<()>),
+}
+
+pub struct Job {
+    pub data: JobConfig,
+    pub action: Option<Box<dyn JobAction + Send + Sync>>,
+    pub status: Status,
+}
 impl Job {
     pub fn new(data: JobConfig, action: impl JobAction + Send + Sync + 'static) -> Self {
         Job {
@@ -140,6 +139,7 @@ impl Job {
         }
     }
 }
+
 pub enum LockStatus<LOCK> {
     Acquired(JobData, LOCK),
     AlreadyLocked,
