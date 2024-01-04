@@ -1,5 +1,5 @@
-use crate::job::Status::{Registered, Running};
-use crate::{Error, Result};
+use crate::job::Status::Registered;
+use crate::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cron::Schedule;
@@ -9,8 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Display;
 use std::future::Future;
-use std::str::FromStr;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::Duration;
 use tokio::sync::oneshot::Sender;
 
 #[derive(Default, Clone, Into, Eq, Hash, PartialEq, Debug, Serialize, Deserialize)]
@@ -121,7 +120,7 @@ pub trait JobAction {
 #[derive(Debug)]
 pub(crate) enum Status {
     Registered,
-    Suspended,
+    //Suspended,
     Running(Sender<()>),
 }
 
@@ -138,10 +137,9 @@ impl Job {
             status: Registered,
         }
     }
-    pub fn get_registered_or_running(s: &Status) -> bool {
-        match s {
+    pub fn registered(&self) -> bool {
+        match self.status {
             Registered => true,
-            Running(_s) => true,
             _ => false,
         }
     }

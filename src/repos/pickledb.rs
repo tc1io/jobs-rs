@@ -1,21 +1,35 @@
 use crate::job::{JobData, JobName, LockStatus, Repo};
-use crate::repos::pickledb::PickleDbRepo;
 use crate::Error;
-use crate::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cron::Schedule as CronSchedule;
 use futures::future::BoxFuture;
 use futures::FutureExt;
 use log::trace;
+use pickledb::PickleDb;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::{Duration, UNIX_EPOCH};
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use AsRef;
+
+#[derive(Clone)]
+pub struct PickleDbRepo {
+    pub(crate) db: Arc<RwLock<PickleDb>>,
+}
+
+impl PickleDbRepo {
+    pub fn new(db: PickleDb) -> Self {
+        Self {
+            db: Arc::new(RwLock::new(db)),
+        }
+    }
+}
 
 #[derive(Clone, Serialize, Debug, Deserialize, PartialEq)]
 struct JobDto {
@@ -70,16 +84,15 @@ impl TryFrom<JobDto> for JobData {
     }
 }
 
-pub struct MyLock {
-    repo: PickleDbRepo,
-    fut: Option<BoxFuture<'static, Result<()>>>,
+pub struct Lock {
+    fut: BoxFuture<'static, crate::Result<()>>,
 }
 
 #[async_trait]
 impl Repo for PickleDbRepo {
-    type Lock = MyLock;
+    type Lock = Lock;
 
-    async fn create(&mut self, job_config: JobData) -> Result<()> {
+    async fn create(&mut self, job_config: JobData) -> crate::Result<()> {
         let job: JobDto = job_config.into();
         self.db
             .write()
@@ -89,13 +102,13 @@ impl Repo for PickleDbRepo {
             .map_err(|e| Error::Repo(e.to_string()))?
     }
 
-    async fn get(&mut self, name: JobName) -> Result<Option<JobData>> {
+    async fn get(&mut self, name: JobName) -> crate::Result<Option<JobData>> {
         let j = self.db.write().await.get::<JobDto>(name.as_ref());
 
         match j {
             None => Ok(None),
             Some(d) => {
-                let jd: Result<JobData> = d.try_into();
+                let jd: crate::Result<JobData> = d.try_into();
                 match jd {
                     Ok(k) => Ok(Some(k)),
                     Err(e) => Err(e),
@@ -104,7 +117,7 @@ impl Repo for PickleDbRepo {
         }
     }
 
-    async fn commit(&mut self, name: JobName, state: Vec<u8>) -> crate::Result<()> {
+    async fn commit(&mut self, _name: JobName, _state: Vec<u8>) -> crate::Result<()> {
         todo!()
     }
 
@@ -127,26 +140,30 @@ impl Repo for PickleDbRepo {
             .map_err(|e| Error::Repo(e.to_string()))
     }
 
-    async fn lock(&mut self, name: JobName, owner: String) -> Result<LockStatus<Self::Lock>> {
+    async fn lock(
+        &mut self,
+        name: JobName,
+        owner: String,
+    ) -> crate::Result<LockStatus<Self::Lock>> {
         let mut w = self.db.write().await;
 
-        let mut j = w.get::<JobDto>(name.as_ref()).ok_or(Error::TODO)?;
-        if j.expires > Utc::now().timestamp() {
+        let mut jdto = w.get::<JobDto>(name.as_ref()).ok_or(Error::TODO)?;
+        if jdto.expires > Utc::now().timestamp() {
             Ok(LockStatus::AlreadyLocked)
         } else {
-            j.owner = owner;
-            j.expires = Utc::now().timestamp() + 10;
-            j.version = 0;
-            w.set(name.as_ref(), &j)
+            jdto.owner = owner;
+            jdto.expires = Utc::now().timestamp() + 10;
+            jdto.version = 0;
+            w.set(name.as_ref(), &jdto)
                 .map_err(|e| Error::Repo(e.to_string()))
                 .unwrap();
 
-            let name = j.name.clone();
-            let owner = j.owner.clone();
+            let name = jdto.name.clone();
+            let owner = jdto.owner.clone();
             let db = self.db.clone();
-            let ttl_secs = 5; // TODO derive ttl from config j.xxx
+            let ttl_secs = 5; // TODO derive ttl from config jdto.xxx
 
-            let f = async move {
+            let fut = async move {
                 trace!("starting lock refresh");
                 loop {
                     let refresh_interval = Duration::from_secs(ttl_secs / 2);
@@ -154,6 +171,7 @@ impl Repo for PickleDbRepo {
                     let mut w = db.write().await;
                     let mut j = w.get::<JobDto>(name.as_ref()).ok_or(Error::TODO).unwrap();
                     j.expires = Utc::now().timestamp() + ttl_secs as i64;
+                    j.owner = owner.clone();
                     match w.set(name.0.as_str(), &j) {
                         Ok(()) => {}
                         Err(e) => return Err(Error::LockRefreshFailed(e.to_string())),
@@ -163,43 +181,18 @@ impl Repo for PickleDbRepo {
             }
             .boxed();
 
-            let lock = MyLock {
-                repo: self.clone(),
-                fut: Some(f),
-            };
+            let lock = Lock { fut };
 
-            let job_config: JobData = j.try_into()?;
+            let job_config: JobData = jdto.try_into()?;
             Ok(LockStatus::Acquired(job_config, lock))
         }
     }
 }
 
-impl Drop for MyLock {
-    fn drop(&mut self) {
-        {
-            let f = self.fut.take();
-        }
-        trace!("droped lock refresh future");
-        // self.repo
-        //     .db
-        //     .write()
-        //     .await
-        //     .set(name.0.as_str(), &LockData{
-        //         owner,
-        //         expires,
-        //         version: 0,
-        //     }).unwrap();
-    }
-}
-
-impl Future for MyLock {
-    type Output = Result<()>;
+impl Future for Lock {
+    type Output = crate::Result<()>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        //trace!("droped lock refresh future");
-        match self.fut.as_mut() {
-            None => Poll::Ready(Ok(())),
-            Some(f) => f.as_mut().poll_unpin(cx),
-        }
+        self.fut.poll_unpin(cx)
     }
 }

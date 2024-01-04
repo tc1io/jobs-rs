@@ -1,0 +1,1 @@
+[{"project-updater":"{\"name\":\"project-updater\",\"check_interval\":3,\"lock_ttl\":20,\"state\":[50],\"schedule\":\"0 * * * * *\",\"enabled\":true,\"last_run\":1704385802,\"owner\":\"\",\"expires\":0,\"version\":0}"},{}]

@@ -2,7 +2,7 @@ use crate::job::{JobAction, JobConfig, JobData, JobName, LockStatus, Repo};
 use crate::Result;
 use chrono::Utc;
 use log::{error, trace};
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Formatter};
 use tokio::sync::oneshot::Receiver;
 use tokio::time::{sleep, Duration};
 
@@ -145,7 +145,7 @@ async fn on_sleeping<R: Repo>(
         Executor::Done
     } else {
         shared.cancel_signal_rx = Some(cancel_signal_rx);
-        Executor::TryLock {
+        Executor::CheckDue {
             shared,
             name,
             delay,

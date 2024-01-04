@@ -1,16 +1,29 @@
+use crate::job::{JobData, JobName, LockStatus, Repo};
+use crate::{Error, PickleDbRepo, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::future::BoxFuture;
+use futures::FutureExt;
+use mongodb::Client;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::Duration;
-// use mongodb::bson::doc;
-// use crate::Error;
-use crate::job::{JobData, JobName, LockStatus, Repo};
-use crate::repos::mongo::MongoRepo;
-use crate::repos::pickledb::PickleDbRepo;
-use futures::FutureExt;
+
+#[derive(Clone)]
+pub struct MongoRepo {
+    client: Client,
+}
+
+impl MongoRepo {
+    pub async fn init(s: impl AsRef<str>) -> Result<MongoRepo> {
+        dbg!("into");
+        let client = Client::with_uri_str(s.as_ref())
+            .await
+            .map_err(|e| Error::Repo(e.to_string()))?;
+        dbg!("done");
+        Ok(MongoRepo { client })
+    }
+}
 
 pub struct MyLock {
     repo: PickleDbRepo,
@@ -92,6 +105,7 @@ impl Repo for MongoRepo {
     //         .map_err(|e| Error::Repo(e.to_string()))?
     // }
 }
+
 impl Future for MyLock {
     type Output = crate::Result<()>;
 

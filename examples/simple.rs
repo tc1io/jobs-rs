@@ -1,37 +1,34 @@
 use async_trait::async_trait;
+use jobs::{schedule, PickleDbRepo};
+use jobs::{Error, Result};
+use jobs::{JobAction, JobConfig, JobManager};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::process;
 use std::sync::{Arc, Mutex};
 use tokio::time::{sleep, Duration};
 
-use jobs::Result;
-use jobs::{schedule, PickleDbRepo};
-use jobs::{JobAction, JobConfig, JobManager};
-
 #[tokio::main]
 async fn main() {
     simple_logger::init().unwrap();
     let db_client = PickleDb::new(
-        "example.db",
+        "jobs.db",
         PickleDbDumpPolicy::AutoDump,
         SerializationMethod::Json,
     );
-    let project_db = PickleDb::load(
-        "project.db",
-        PickleDbDumpPolicy::AutoDump,
-        SerializationMethod::Json,
-    )
-    .unwrap();
     let db_repo = PickleDbRepo::new(db_client);
 
+    let counter_db = PickleDb::new(
+        "counter.db",
+        PickleDbDumpPolicy::AutoDump,
+        SerializationMethod::Json,
+    );
+
     let job = JobImplementer {
-        db: Arc::new(Mutex::new(project_db)),
+        db: Arc::new(Mutex::new(counter_db)),
     };
 
-    let pid = process::id();
-
-    let mut manager = JobManager::<PickleDbRepo>::new(pid.to_string(), db_repo);
+    let mut manager = JobManager::<PickleDbRepo>::new(process::id().to_string(), db_repo);
 
     manager.register(
         JobConfig::new("project-updater", schedule::minutely())
@@ -48,65 +45,35 @@ async fn main() {
     // sleep(Duration::from_secs(30)).await;
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
+struct State(i32);
+
 #[derive(Clone)]
 struct JobImplementer {
     db: Arc<Mutex<PickleDb>>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
-struct Project {
-    name: String,
-    id: i32,
-    lifecycle_state: String,
-    updated: String,
-}
+struct Counter(i32);
 
 #[async_trait]
 impl JobAction for JobImplementer {
     async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>> {
-        let s: String = if state.len() == 0 {
-            String::default()
+        let mut data: State = if state.len() == 0 {
+            State(0)
         } else {
-            String::from_utf8(state).unwrap()
+            serde_json::from_slice(&state).unwrap()
         };
-        println!("IN: {}", &s);
 
-        let s = format!("{}.foo", s);
+        println!("Count: {}", data.0);
 
-        // let all_data = self
-        //     .db
-        //     .lock()
-        //     .map_err(|e| anyhow!(e.to_string()))?
-        //     .get_all();
-        // for a in all_data {
-        //     let maybe_project = self
-        //         .db
-        //         .lock()
-        //         .map_err(|e| anyhow!(e.to_string()))?
-        //         .get::<Project>(&a);
-        //
-        //     if let Some(mut project) = maybe_project {
-        //         if project.lifecycle_state == "DELETED" {
-        //             project.updated = "DONE".to_string();
-        //             self.db
-        //                 .lock()
-        //                 .map_err(|e| anyhow!(e.to_string()))?
-        //                 .set(format!("{:?}", project.id.clone()).as_str(), &project)?;
-        //             println!("{:?}", project);
-        //         }
-        //     }
-        // }
         sleep(Duration::from_secs(1)).await;
-        dbg!("work-1");
-        sleep(Duration::from_secs(2)).await;
-        dbg!("work-2");
-        sleep(Duration::from_secs(3)).await;
-        dbg!("work-3");
-        sleep(Duration::from_secs(4)).await;
-        dbg!("work-4");
-        sleep(Duration::from_secs(5)).await;
-        dbg!("work-5");
-        let state = Vec::from(s.as_bytes());
-        Ok(state)
+
+        data.0 += 1;
+
+        match self.db.lock().unwrap().set("counter", &Counter(data.0)) {
+            Ok(()) => Ok(serde_json::to_vec(&data).unwrap()),
+            Err(_e) => Err(Error::TODO),
+        }
     }
 }
