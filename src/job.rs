@@ -22,13 +22,6 @@ impl AsRef<str> for JobName {
     }
 }
 
-// TODO remove?
-impl Display for JobName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 #[derive(Clone)]
 pub struct JobConfig {
     pub name: JobName,
@@ -89,6 +82,20 @@ impl JobData {
         }
         trace!("run is not due");
         false
+    }
+}
+
+impl Display for JobData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "[{} schedule='{}' lastrun={} interval={}s ttl={}s]",
+            self.name.0,
+            self.schedule,
+            self.last_run,
+            self.check_interval.as_secs(),
+            self.lock_ttl.as_secs()
+        )
     }
 }
 

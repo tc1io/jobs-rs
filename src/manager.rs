@@ -58,11 +58,11 @@ impl<J: Repo + Clone + Send + Sync + 'static> JobManager<J> {
             let delay = Duration::from_millis(rng.gen_range(10..100));
             tokio::spawn(async move {
                 let name = data.name.clone();
-                trace!("start executor for job {}", &name);
+                trace!("start executor for job {:?}", &name);
                 let ex = Executor::new(instance, data, action, job_repo, rx, delay);
                 match ex.run().await {
-                    Ok(()) => trace!("job {} stopped", &name),
-                    Err(e) => warn!("job {} stopped with an error: {:?}", &name, e),
+                    Ok(()) => trace!("job {:?} stopped", &name),
+                    Err(e) => warn!("job {:?} stopped with an error: {:?}", &name, e),
                 };
             });
         }

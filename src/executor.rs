@@ -2,7 +2,7 @@ use crate::job::{JobAction, JobConfig, JobData, JobName, LockStatus, Repo};
 use crate::Result;
 use chrono::Utc;
 use log::{error, trace};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use tokio::sync::oneshot::Receiver;
 use tokio::time::{sleep, Duration};
 
@@ -182,7 +182,7 @@ async fn on_start<R: Repo>(mut shared: Shared<R>, jdata: JobData) -> Executor<R>
             }
         }
         Ok(Some(jdata)) => {
-            trace!("OK ....jc: {:?}", jdata);
+            trace!("Start({})", jdata);
             if jdata.due(Utc::now()) {
                 Executor::TryLock {
                     shared,
@@ -212,6 +212,7 @@ async fn on_check_due<R: Repo>(
             delay, // TODO Retry interval, attempt counter, bbackoff
         },
         Ok(Some(jdata)) => {
+            trace!("CheckDue({})", jdata);
             if jdata.due(Utc::now()) {
                 Executor::TryLock {
                     shared,
@@ -246,6 +247,7 @@ async fn on_try_lock<R: Repo>(
             delay,
         },
         Ok(LockStatus::Acquired(jdata, lock)) => {
+            trace!("TryLock({})", jdata);
             if jdata.due(Utc::now()) {
                 Executor::Run {
                     shared,
@@ -253,7 +255,11 @@ async fn on_try_lock<R: Repo>(
                     lock,
                 }
             } else {
-                shared.job_repo.save(jdata.name, jdata.last_run, jdata.state).await.unwrap();
+                shared
+                    .job_repo
+                    .save(jdata.name, jdata.last_run, jdata.state)
+                    .await
+                    .unwrap();
                 Executor::Sleeping {
                     shared,
                     name,

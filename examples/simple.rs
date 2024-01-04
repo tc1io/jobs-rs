@@ -34,7 +34,8 @@ async fn main() {
     let mut manager = JobManager::<PickleDbRepo>::new(pid.to_string(), db_repo);
 
     manager.register(
-        JobConfig::new("project-updater", schedule::minutely()),
+        JobConfig::new("project-updater", schedule::minutely())
+            .with_check_interval(Duration::from_secs(3)),
         job.clone(),
     );
     let _ = manager.start_all().await.unwrap();

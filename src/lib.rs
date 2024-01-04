@@ -23,13 +23,13 @@ pub enum Error {
     // Redaction(String),
     #[error("invalid cron expression {expression:?}: {msg:?})")]
     InvalidCronExpression { expression: String, msg: String },
-    #[error("Job is missing: {0}")]
+    #[error("Job is missing: {0:?}")]
     JobNotFound(JobName),
     #[error("Repository error: {0}")]
     Repo(String),
     #[error("Loack refresh failed: {0}")]
     LockRefreshFailed(String),
-    #[error("canceling job {0} failed")]
+    #[error("canceling job {0:?} failed")]
     CancelFailed(JobName),
 
     #[error("TODO")]
