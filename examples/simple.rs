@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use jobs::{schedule, PickleDbRepo};
 use jobs::{Error, Result};
 use jobs::{JobAction, JobConfig, JobManager};
+use mongodb::Client;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::process;
@@ -11,6 +12,14 @@ use tokio::time::{sleep, Duration};
 #[tokio::main]
 async fn main() {
     simple_logger::init().unwrap();
+
+    let client = mongodb::Client::with_uri_str("mongodb://localhost:27017")
+        .await
+        .map_err(|e| Error::Repo(e.to_string()))
+        .unwrap();
+
+    let repo = jobs::MongoRepo::new(client).unwrap();
+
     let db_client = PickleDb::new(
         "jobs.db",
         PickleDbDumpPolicy::AutoDump,
@@ -28,7 +37,8 @@ async fn main() {
         db: Arc::new(Mutex::new(counter_db)),
     };
 
-    let mut manager = JobManager::<PickleDbRepo>::new(process::id().to_string(), db_repo);
+    //let mut manager = JobManager::<PickleDbRepo>::new(process::id().to_string(), db_repo);
+    let mut manager = JobManager::new(process::id().to_string(), repo);
 
     manager.register(
         JobConfig::new("project-updater", schedule::minutely())

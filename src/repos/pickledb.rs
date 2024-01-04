@@ -2,13 +2,14 @@ use crate::job::{JobData, JobName, LockStatus, Repo};
 use crate::Error;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use cron::Schedule as CronSchedule;
+use cron::Schedule;
 use futures::future::BoxFuture;
 use futures::FutureExt;
 use log::trace;
 use pickledb::PickleDb;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
+use std::ops::Add;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -66,7 +67,7 @@ impl TryFrom<JobDto> for JobData {
     type Error = Error;
 
     fn try_from(value: JobDto) -> std::result::Result<Self, Self::Error> {
-        let schedule = CronSchedule::from_str(value.schedule.as_str()).map_err(|e| {
+        let schedule = Schedule::from_str(value.schedule.as_str()).map_err(|e| {
             Error::InvalidCronExpression {
                 expression: value.schedule,
                 msg: e.to_string(),
@@ -144,6 +145,7 @@ impl Repo for PickleDbRepo {
         &mut self,
         name: JobName,
         owner: String,
+        ttl: Duration,
     ) -> crate::Result<LockStatus<Self::Lock>> {
         let mut w = self.db.write().await;
 
@@ -152,7 +154,7 @@ impl Repo for PickleDbRepo {
             Ok(LockStatus::AlreadyLocked)
         } else {
             jdto.owner = owner;
-            jdto.expires = Utc::now().timestamp() + 10;
+            jdto.expires = Utc::now().timestamp() + ttl.as_secs() as i64;
             jdto.version = 0;
             w.set(name.as_ref(), &jdto)
                 .map_err(|e| Error::Repo(e.to_string()))
@@ -161,16 +163,15 @@ impl Repo for PickleDbRepo {
             let name = jdto.name.clone();
             let owner = jdto.owner.clone();
             let db = self.db.clone();
-            let ttl_secs = 5; // TODO derive ttl from config jdto.xxx
 
             let fut = async move {
                 trace!("starting lock refresh");
                 loop {
-                    let refresh_interval = Duration::from_secs(ttl_secs / 2);
+                    let refresh_interval = Duration::from_secs(ttl.as_secs() / 2);
                     sleep(refresh_interval).await;
                     let mut w = db.write().await;
                     let mut j = w.get::<JobDto>(name.as_ref()).ok_or(Error::TODO).unwrap();
-                    j.expires = Utc::now().timestamp() + ttl_secs as i64;
+                    j.expires = Utc::now().timestamp() + ttl.as_secs() as i64;
                     j.owner = owner.clone();
                     match w.set(name.0.as_str(), &j) {
                         Ok(()) => {}

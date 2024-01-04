@@ -15,6 +15,12 @@ use tokio::sync::oneshot::Sender;
 #[derive(Default, Clone, Into, Eq, Hash, PartialEq, Debug, Serialize, Deserialize)]
 pub struct JobName(pub String);
 
+impl JobName {
+    pub fn as_str(&self) -> &str {
+        &self.0.as_str()
+    }
+}
+
 impl AsRef<str> for JobName {
     fn as_ref(&self) -> &str {
         self.0.as_str()
@@ -153,7 +159,7 @@ pub enum LockStatus<LOCK> {
 pub trait Repo {
     type Lock: Future<Output = Result<()>> + Send;
     // Transactionally create job config entry if it does not exist.
-    async fn create(&mut self, job: JobData) -> Result<()>;
+    async fn create(&mut self, data: JobData) -> Result<()>;
     // Obtain job data by name without locking
     async fn get(&mut self, name: JobName) -> Result<Option<JobData>>;
     // Save state without unlocking so jobs can do intermediate commits.
@@ -161,5 +167,10 @@ pub trait Repo {
     // Save the job state after the job ran and release the lock.
     async fn save(&mut self, name: JobName, last_run: DateTime<Utc>, state: Vec<u8>) -> Result<()>;
     // Get the job data if the lock can be obtained. Return job data and the lock future.
-    async fn lock(&mut self, name: JobName, owner: String) -> Result<LockStatus<Self::Lock>>;
+    async fn lock(
+        &mut self,
+        name: JobName,
+        owner: String,
+        ttl: Duration,
+    ) -> Result<LockStatus<Self::Lock>>;
 }

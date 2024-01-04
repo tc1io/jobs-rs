@@ -235,7 +235,12 @@ async fn on_try_lock<R: Repo>(
     delay: Duration,
 ) -> Executor<R> {
     let instance = shared.instance.clone(); // try to avoid
-    match shared.job_repo.lock(name.clone(), instance).await {
+    match shared
+        .job_repo
+        .lock(name.clone(), instance, Duration::from_secs(10))
+        .await
+    {
+        // TODO use duration from jobdata
         Err(_) => Executor::Sleeping {
             shared,
             name,

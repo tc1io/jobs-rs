@@ -7,6 +7,7 @@ mod repos;
 
 pub mod schedule;
 
+pub use repos::mongo::MongoRepo;
 pub use repos::pickledb::PickleDbRepo;
 
 pub use job::JobAction;
