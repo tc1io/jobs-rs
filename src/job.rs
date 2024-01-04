@@ -61,7 +61,8 @@ pub struct Job {
 #[derive(Clone, Debug)]
 pub struct JobData {
     pub name: JobName,
-    pub check_interval_sec: u64,
+    pub check_interval: Duration,
+    pub lock_ttl: Duration,
     pub state: Vec<u8>,
     pub schedule: CronSchedule,
     pub enabled: bool,
@@ -71,7 +72,8 @@ pub struct JobData {
 #[derive(Clone)]
 pub struct JobConfig {
     pub name: JobName,
-    pub check_interval_sec: u64,
+    pub check_interval: Duration,
+    pub lock_ttl: Duration,
     pub schedule: CronSchedule,
     pub enabled: bool,
 }
@@ -81,9 +83,18 @@ impl JobConfig {
         JobConfig {
             name: JobName(name.into()),
             schedule,
-            check_interval_sec: 0,
+            check_interval: Duration::from_secs(60),
+            lock_ttl: Duration::from_secs(20),
             enabled: true,
         }
+    }
+    pub fn with_check_interval(mut self, interval: Duration) -> Self {
+        self.check_interval = interval;
+        self
+    }
+    pub fn with_lock_ttl(mut self, ttl: Duration) -> Self {
+        self.lock_ttl = ttl;
+        self
     }
 }
 
@@ -91,7 +102,8 @@ impl From<JobConfig> for JobData {
     fn from(value: JobConfig) -> Self {
         Self {
             name: value.name,
-            check_interval_sec: value.check_interval_sec,
+            check_interval: value.check_interval,
+            lock_ttl: value.lock_ttl,
             state: Vec::default(),
             schedule: value.schedule,
             enabled: value.enabled,

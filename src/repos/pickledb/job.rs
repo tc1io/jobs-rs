@@ -18,9 +18,10 @@ use tokio::time::sleep;
 use AsRef;
 
 #[derive(Clone, Serialize, Debug, Deserialize, PartialEq)]
-struct Job {
+struct JobDto {
     pub name: JobName,
-    pub check_interval_sec: u64,
+    pub check_interval: u64,
+    pub lock_ttl: u64,
     pub state: Vec<u8>,
     pub schedule: String,
     pub enabled: bool,
@@ -30,11 +31,12 @@ struct Job {
     pub version: i8,
 }
 
-impl From<JobData> for Job {
+impl From<JobData> for JobDto {
     fn from(value: JobData) -> Self {
         Self {
             name: value.name,
-            check_interval_sec: value.check_interval_sec,
+            check_interval: value.check_interval.as_secs(),
+            lock_ttl: value.lock_ttl.as_secs(),
             state: value.state,
             schedule: value.schedule.to_string(),
             enabled: value.enabled,
@@ -46,10 +48,10 @@ impl From<JobData> for Job {
     }
 }
 
-impl TryFrom<Job> for JobData {
+impl TryFrom<JobDto> for JobData {
     type Error = Error;
 
-    fn try_from(value: Job) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: JobDto) -> std::result::Result<Self, Self::Error> {
         let schedule = CronSchedule::from_str(value.schedule.as_str()).map_err(|e| {
             Error::InvalidCronExpression {
                 expression: value.schedule,
@@ -58,7 +60,8 @@ impl TryFrom<Job> for JobData {
         })?;
         Ok(Self {
             name: value.name,
-            check_interval_sec: value.check_interval_sec,
+            check_interval: Duration::from_secs(value.check_interval),
+            lock_ttl: Duration::from_secs(value.lock_ttl),
             state: value.state,
             schedule,
             enabled: value.enabled,
@@ -77,7 +80,7 @@ impl Repo for PickleDbRepo {
     type Lock = MyLock;
 
     async fn create(&mut self, job_config: JobData) -> crate::Result<()> {
-        let job: Job = job_config.into();
+        let job: JobDto = job_config.into();
         self.db
             .write()
             .await
@@ -86,8 +89,8 @@ impl Repo for PickleDbRepo {
             .map_err(|e| Error::Repo(e.to_string()))?
     }
 
-    async fn get(&mut self, name: JobName) -> crate::Result<Option<JobData>> {
-        let j = self.db.write().await.get::<Job>(name.as_ref());
+    async fn get(&mut self, name: JobName) -> Result<Option<JobData>> {
+        let j = self.db.write().await.get::<JobDto>(name.as_ref());
 
         match j {
             None => Ok(None),
@@ -108,7 +111,7 @@ impl Repo for PickleDbRepo {
     async fn save(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> crate::Result<()> {
         let mut w = self.db.write().await;
 
-        let mut j = w.get::<Job>(name.as_ref()).ok_or(Error::TODO)?;
+        let mut j = w.get::<JobDto>(name.as_ref()).ok_or(Error::TODO)?;
         j.last_run = last_run;
         j.owner = String::default();
         j.state = state;
@@ -122,7 +125,7 @@ impl Repo for PickleDbRepo {
     async fn lock(&mut self, name: JobName, owner: String) -> Result<LockStatus<Self::Lock>> {
         let mut w = self.db.write().await;
 
-        let mut j = w.get::<Job>(name.as_ref()).ok_or(Error::TODO)?;
+        let mut j = w.get::<JobDto>(name.as_ref()).ok_or(Error::TODO)?;
         if j.expires > Utc::now().timestamp() {
             Ok(LockStatus::AlreadyLocked)
         } else {
@@ -144,7 +147,7 @@ impl Repo for PickleDbRepo {
                     let refresh_interval = Duration::from_secs(ttl_secs / 2);
                     sleep(refresh_interval).await;
                     let mut w = db.write().await;
-                    let mut j = w.get::<Job>(name.as_ref()).ok_or(Error::TODO).unwrap();
+                    let mut j = w.get::<JobDto>(name.as_ref()).ok_or(Error::TODO).unwrap();
                     j.expires = Utc::now().timestamp() + ttl_secs as i64;
                     match w.set(name.0.as_str(), &j) {
                         Ok(()) => {}
