@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use futures::future::BoxFuture;
 use std::future::Future;
 use std::pin::Pin;
@@ -28,11 +29,21 @@ impl Repo for MongoRepo {
         todo!()
     }
 
-    async fn commit(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> crate::Result<()> {
+    async fn commit(
+        &mut self,
+        name: JobName,
+        last_run: DateTime<Utc>,
+        state: Vec<u8>,
+    ) -> crate::Result<()> {
         todo!()
     }
 
-    async fn save(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> crate::Result<()> {
+    async fn save(
+        &mut self,
+        name: JobName,
+        last_run: DateTime<Utc>,
+        state: Vec<u8>,
+    ) -> crate::Result<()> {
         todo!()
     }
 

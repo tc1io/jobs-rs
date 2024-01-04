@@ -3,7 +3,7 @@ use crate::repos::pickledb::PickleDbRepo;
 use crate::Error;
 use crate::Result;
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use cron::Schedule as CronSchedule;
 use futures::future::BoxFuture;
 use futures::FutureExt;
@@ -13,7 +13,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, UNIX_EPOCH};
 use tokio::time::sleep;
 use AsRef;
 
@@ -25,7 +25,7 @@ struct JobDto {
     pub state: Vec<u8>,
     pub schedule: String,
     pub enabled: bool,
-    pub last_run: i64,
+    pub last_run: u64,
     pub owner: String,
     pub expires: i64,
     pub version: i8,
@@ -40,7 +40,7 @@ impl From<JobData> for JobDto {
             state: value.state,
             schedule: value.schedule.to_string(),
             enabled: value.enabled,
-            last_run: value.last_run,
+            last_run: value.last_run.timestamp() as u64,
             owner: "".to_string(),
             expires: 0,
             version: 0,
@@ -65,7 +65,7 @@ impl TryFrom<JobDto> for JobData {
             state: value.state,
             schedule,
             enabled: value.enabled,
-            last_run: value.last_run,
+            last_run: DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(value.last_run)),
         })
     }
 }
@@ -79,7 +79,7 @@ pub struct MyLock {
 impl Repo for PickleDbRepo {
     type Lock = MyLock;
 
-    async fn create(&mut self, job_config: JobData) -> crate::Result<()> {
+    async fn create(&mut self, job_config: JobData) -> Result<()> {
         let job: JobDto = job_config.into();
         self.db
             .write()
@@ -104,15 +104,25 @@ impl Repo for PickleDbRepo {
         }
     }
 
-    async fn commit(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> crate::Result<()> {
+    async fn commit(
+        &mut self,
+        name: JobName,
+        last_run: DateTime<Utc>,
+        state: Vec<u8>,
+    ) -> crate::Result<()> {
         todo!()
     }
 
-    async fn save(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> crate::Result<()> {
+    async fn save(
+        &mut self,
+        name: JobName,
+        last_run: DateTime<Utc>,
+        state: Vec<u8>,
+    ) -> crate::Result<()> {
         let mut w = self.db.write().await;
 
         let mut j = w.get::<JobDto>(name.as_ref()).ok_or(Error::TODO)?;
-        j.last_run = last_run;
+        j.last_run = last_run.timestamp() as u64;
         j.owner = String::default();
         j.state = state;
         j.expires = 0;

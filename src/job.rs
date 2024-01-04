@@ -66,7 +66,7 @@ pub struct JobData {
     pub state: Vec<u8>,
     pub schedule: CronSchedule,
     pub enabled: bool,
-    pub last_run: i64,
+    pub last_run: DateTime<Utc>,
 }
 
 #[derive(Clone)]
@@ -107,7 +107,7 @@ impl From<JobConfig> for JobData {
             state: Vec::default(),
             schedule: value.schedule,
             enabled: value.enabled,
-            last_run: 0,
+            last_run: DateTime::default(),
         }
     }
 }
@@ -118,20 +118,15 @@ impl JobData {
             trace!("job not enabled");
             return false;
         }
-        if self.last_run.eq(&0) {
-            trace!("last run is 0");
-            return true;
-        }
-        let last_run =
-            DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_millis(self.last_run as u64));
-        trace!("last run is {}", last_run);
+
+        trace!("last run is {:?}", self.last_run);
         let next_scheduled_run = self
             .schedule
-            .after(&last_run)
+            .after(&self.last_run)
             .next()
-            .map_or_else(|| 0, |t| t.timestamp_millis());
-        trace!("next schedule run is {}", next_scheduled_run);
-        if next_scheduled_run.lt(&now.timestamp_millis()) {
+            .unwrap_or_else(|| DateTime::default());
+        trace!("next schedule run is {:?}", next_scheduled_run);
+        if next_scheduled_run.lt(&now) {
             trace!("run is due");
             return true;
         }
@@ -168,9 +163,14 @@ pub trait Repo {
     // Obtain job data by name without locking
     async fn get(&mut self, name: JobName) -> Result<Option<JobData>>;
     // TODO
-    async fn commit(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> Result<()>;
+    async fn commit(
+        &mut self,
+        name: JobName,
+        last_run: DateTime<Utc>,
+        state: Vec<u8>,
+    ) -> Result<()>;
     // Save the job state after the job ran and release the lock.
-    async fn save(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> Result<()>;
+    async fn save(&mut self, name: JobName, last_run: DateTime<Utc>, state: Vec<u8>) -> Result<()>;
     // Get the job data if the lock can be obtained. Return job data and the lock future.
     async fn lock(&mut self, name: JobName, owner: String) -> Result<LockStatus<Self::Lock>>;
 }

@@ -31,6 +31,7 @@ pub enum Executor<JR: Repo> {
     TryLock {
         shared: Shared<JR>,
         name: JobName,
+        delay: Duration,
     },
     Run {
         shared: Shared<JR>,
@@ -89,7 +90,11 @@ impl<J: Repo + Clone + Send + Sync> Executor<J> {
                     name,
                     delay,
                 } => on_sleeping(shared, name, delay).await,
-                Self::TryLock { shared, name } => on_try_lock(shared, name).await,
+                Self::TryLock {
+                    shared,
+                    name,
+                    delay,
+                } => on_try_lock(shared, name, delay).await,
 
                 Self::Run {
                     shared,
@@ -127,7 +132,11 @@ async fn on_sleeping<R: Repo>(
         Executor::Done
     } else {
         shared.cancel_signal_rx = Some(cancel_signal_rx);
-        Executor::TryLock { shared, name }
+        Executor::TryLock {
+            shared,
+            name,
+            delay,
+        }
     }
 }
 
@@ -155,6 +164,7 @@ async fn on_start<R: Repo>(mut shared: Shared<R>, jdata: JobData) -> Executor<R>
                 Ok(()) => Executor::TryLock {
                     shared,
                     name: jdata.name,
+                    delay: jdata.check_interval,
                 },
             }
         }
@@ -164,29 +174,34 @@ async fn on_start<R: Repo>(mut shared: Shared<R>, jdata: JobData) -> Executor<R>
                 Executor::TryLock {
                     shared,
                     name: jdata.name,
+                    delay: jdata.check_interval,
                 }
             } else {
                 Executor::Sleeping {
                     shared,
                     name: jdata.name,
-                    delay: Duration::from_secs(10),
+                    delay: jdata.check_interval,
                 }
             }
         }
     }
 }
-async fn on_try_lock<R: Repo>(mut shared: Shared<R>, name: JobName) -> Executor<R> {
+async fn on_try_lock<R: Repo>(
+    mut shared: Shared<R>,
+    name: JobName,
+    delay: Duration,
+) -> Executor<R> {
     let instance = shared.instance.clone(); // try to avoid
     match shared.job_repo.lock(name.clone(), instance).await {
         Err(_) => Executor::Sleeping {
             shared,
             name,
-            delay: Duration::from_secs(10),
+            delay, // TODO Retry interval, attempt counter, bbackoff
         },
         Ok(LockStatus::AlreadyLocked) => Executor::Sleeping {
             shared,
             name,
-            delay: Duration::from_secs(10),
+            delay,
         },
         Ok(LockStatus::Acquired(jdata, lock)) => {
             if jdata.due(Utc::now()) {
@@ -199,7 +214,7 @@ async fn on_try_lock<R: Repo>(mut shared: Shared<R>, name: JobName) -> Executor<
                 Executor::Sleeping {
                     shared,
                     name,
-                    delay: Duration::from_secs(10),
+                    delay,
                 }
             }
         }
@@ -214,12 +229,11 @@ async fn on_run<R: Repo>(mut shared: Shared<R>, jdata: JobData, lock: R::Lock) -
             sxx = job_fut => {
                 match sxx {
                  Ok(xxx) => {
-                let last_run = Utc::now().timestamp_millis();
-                let _x = shared.job_repo.save(jdata.name.clone(), last_run, xxx).await.unwrap();
+                let _x = shared.job_repo.save(jdata.name.clone(), Utc::now(), xxx).await.unwrap();
                 Executor::Sleeping {
                     shared,
                     name,
-                    delay: Duration::from_secs(10),
+                    delay: jdata.check_interval,
                 }
                 },
                 Err(_) => Executor::Done,
@@ -236,74 +250,7 @@ async fn on_run<R: Repo>(mut shared: Shared<R>, jdata: JobData, lock: R::Lock) -
         Executor::Sleeping {
             shared,
             name,
-            delay: Duration::from_secs(10),
+            delay: jdata.check_interval,
         }
     }
 }
-
-//
-// if job_config.clone().run_job_now()? {
-//     let name = job_config.clone().name;
-//     let mut lock_data = ex.lock_data.clone();
-//     lock_data.expires = (Utc::now().timestamp_millis() as u64)
-//         .add(lock_data.ttl.as_millis() as u64);
-//     if ex.lock_repo.acquire_lock(name.clone(), lock_data).await? {
-//         let refresh_lock_fut = ex.lock_repo.refresh_lock(name.clone());
-//         let mut action = ex.action.lock().await;
-//         let job_fut = action.call(job_config.state);
-//         tokio::select! {
-//                 refreshed = refresh_lock_fut => {
-//                 match refreshed {
-//                     Ok(_x) => Ok(()),
-//                     Err(e) => Err(anyhow!(e)),
-//                     }
-//                 }
-//                 state = job_fut => {
-//                 match state {
-//                     Ok(s) => {
-//                         let last_run = Utc::now().timestamp_millis();
-//                         let _x = ex.job_repo.save_state(name, last_run, s).await?;
-//                         ex.job_config.last_run = last_run;
-//                         Ok(())
-//                     }
-//                     Err(e) => Err(anyhow!(e)),
-//                 }
-//             }
-//         }?;
-//     }
-// }
-
-// println!("RUN");
-// let job_config = repos.job_repo.get_job(name.clone()).await?.unwrap();
-//
-// if job_config.clone().run_job_now()? {
-// let name = job_config.clone().name;
-// let mut lock_data = ex.lock_data.clone();
-// lock_data.expires = (Utc::now().timestamp_millis() as u64)
-// .add(lock_data.ttl.as_millis() as u64);
-// if ex.lock_repo.acquire_lock(name.clone(), lock_data).await? {
-// let refresh_lock_fut = ex.lock_repo.refresh_lock(name.clone());
-// let mut action = ex.action.lock().await;
-// let job_fut = action.call(job_config.state);
-// tokio::select! {
-// refreshed = refresh_lock_fut => {
-// match refreshed {
-// Ok(_x) => Ok(()),
-// Err(e) => Err(anyhow!(e)),
-// }
-// }
-// state = job_fut => {
-// match state {
-// Ok(s) => {
-// let last_run = Utc::now().timestamp_millis();
-// let _x = ex.job_repo.save_state(name, last_run, s).await?;
-// ex.job_config.last_run = last_run;
-// Ok(())
-// }
-// Err(e) => Err(anyhow!(e)),
-// }
-// }
-// }?;
-// }
-// }
-// }
