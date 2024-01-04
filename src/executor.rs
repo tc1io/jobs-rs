@@ -253,6 +253,7 @@ async fn on_try_lock<R: Repo>(
                     lock,
                 }
             } else {
+                shared.job_repo.save(jdata.name, jdata.last_run, jdata.state).await.unwrap();
                 Executor::Sleeping {
                     shared,
                     name,
