@@ -151,13 +151,8 @@ pub trait Repo {
     async fn create(&mut self, job: JobData) -> Result<()>;
     // Obtain job data by name without locking
     async fn get(&mut self, name: JobName) -> Result<Option<JobData>>;
-    // TODO
-    async fn commit(
-        &mut self,
-        name: JobName,
-        last_run: DateTime<Utc>,
-        state: Vec<u8>,
-    ) -> Result<()>;
+    // Save state without unlocking so jobs can do intermediate commits.
+    async fn commit(&mut self, name: JobName, state: Vec<u8>) -> Result<()>;
     // Save the job state after the job ran and release the lock.
     async fn save(&mut self, name: JobName, last_run: DateTime<Utc>, state: Vec<u8>) -> Result<()>;
     // Get the job data if the lock can be obtained. Return job data and the lock future.

@@ -29,12 +29,7 @@ impl Repo for MongoRepo {
         todo!()
     }
 
-    async fn commit(
-        &mut self,
-        name: JobName,
-        last_run: DateTime<Utc>,
-        state: Vec<u8>,
-    ) -> crate::Result<()> {
+    async fn commit(&mut self, name: JobName, state: Vec<u8>) -> crate::Result<()> {
         todo!()
     }
 
