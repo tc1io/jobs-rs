@@ -5,11 +5,12 @@ mod job;
 mod manager;
 mod repos;
 
+pub mod schedule;
+
 pub use repos::pickledb::PickleDbRepo;
 
 pub use job::JobAction;
 pub use job::JobConfig;
-pub use job::Schedule;
 pub use manager::JobManager;
 
 use job::JobName;

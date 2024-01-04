@@ -2,7 +2,7 @@ use crate::job::Status::{Registered, Running};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use cron::Schedule as CronSchedule;
+use cron::Schedule;
 use derive_more::Into;
 use log::trace;
 use serde::{Deserialize, Serialize};
@@ -19,17 +19,6 @@ pub struct JobName(pub String);
 impl AsRef<str> for JobName {
     fn as_ref(&self) -> &str {
         self.0.as_str()
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, Default, PartialEq)]
-pub struct Schedule {
-    pub expr: String, // TODO: consider alias
-}
-
-impl Schedule {
-    pub fn minutely() -> CronSchedule {
-        CronSchedule::from_str("0 * * * * *").expect("minutely cron expression should parse")
     }
 }
 
@@ -64,7 +53,7 @@ pub struct JobData {
     pub check_interval: Duration,
     pub lock_ttl: Duration,
     pub state: Vec<u8>,
-    pub schedule: CronSchedule,
+    pub schedule: Schedule,
     pub enabled: bool,
     pub last_run: DateTime<Utc>,
 }
@@ -74,12 +63,12 @@ pub struct JobConfig {
     pub name: JobName,
     pub check_interval: Duration,
     pub lock_ttl: Duration,
-    pub schedule: CronSchedule,
+    pub schedule: Schedule,
     pub enabled: bool,
 }
 
 impl JobConfig {
-    pub fn new(name: impl Into<String>, schedule: CronSchedule) -> Self {
+    pub fn new(name: impl Into<String>, schedule: Schedule) -> Self {
         JobConfig {
             name: JobName(name.into()),
             schedule,

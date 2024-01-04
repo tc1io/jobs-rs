@@ -1,4 +1,4 @@
-use crate::job::{JobData, JobName, LockStatus, Repo, Schedule};
+use crate::job::{JobData, JobName, LockStatus, Repo};
 use crate::repos::pickledb::PickleDbRepo;
 use crate::Error;
 use crate::Result;

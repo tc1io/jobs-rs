@@ -5,9 +5,9 @@ use std::process;
 use std::sync::{Arc, Mutex};
 use tokio::time::{sleep, Duration};
 
-use jobs::PickleDbRepo;
 use jobs::Result;
-use jobs::{JobAction, JobConfig, JobManager, Schedule};
+use jobs::{schedule, PickleDbRepo};
+use jobs::{JobAction, JobConfig, JobManager};
 
 #[tokio::main]
 async fn main() {
@@ -34,7 +34,7 @@ async fn main() {
     let mut manager = JobManager::<PickleDbRepo>::new(pid.to_string(), db_repo);
 
     manager.register(
-        JobConfig::new("project-updater", Schedule::minutely()),
+        JobConfig::new("project-updater", schedule::minutely()),
         job.clone(),
     );
     let _ = manager.start_all().await.unwrap();
