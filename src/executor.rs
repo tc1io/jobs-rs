@@ -28,6 +28,11 @@ pub enum Executor<JR: Repo> {
         shared: Shared<JR>,
         jdata: JobData,
     },
+    CheckDue {
+        shared: Shared<JR>,
+        name: JobName,
+        delay: Duration,
+    },
     TryLock {
         shared: Shared<JR>,
         name: JobName,
@@ -48,6 +53,9 @@ impl<JR: Repo> Debug for Executor<JR> {
             Executor::Sleeping { .. } => f.write_str("--------------------------- sleeping"),
             Executor::Start { .. } => f.write_str("------------------------------------ start"),
             Executor::TryLock { .. } => f.write_str("------------------------------------ trylock"),
+            Executor::CheckDue { .. } => {
+                f.write_str("------------------------------------ CheckDue")
+            }
             Executor::Run { .. } => f.write_str("------------------------------------ run"),
             Executor::Done => f.write_str("------------------------------------ done"),
         }
@@ -90,6 +98,11 @@ impl<J: Repo + Clone + Send + Sync> Executor<J> {
                     name,
                     delay,
                 } => on_sleeping(shared, name, delay).await,
+                Self::CheckDue {
+                    shared,
+                    name,
+                    delay,
+                } => on_check_due(shared, name, delay).await,
                 Self::TryLock {
                     shared,
                     name,
@@ -181,6 +194,35 @@ async fn on_start<R: Repo>(mut shared: Shared<R>, jdata: JobData) -> Executor<R>
                     shared,
                     name: jdata.name,
                     delay: jdata.check_interval,
+                }
+            }
+        }
+    }
+}
+async fn on_check_due<R: Repo>(
+    mut shared: Shared<R>,
+    name: JobName,
+    delay: Duration,
+) -> Executor<R> {
+    match shared.job_repo.get(name.clone()).await {
+        Err(_) | Ok(None) => Executor::Sleeping {
+            // TODO split these two cases for clarity
+            shared,
+            name,
+            delay, // TODO Retry interval, attempt counter, bbackoff
+        },
+        Ok(Some(jdata)) => {
+            if jdata.due(Utc::now()) {
+                Executor::TryLock {
+                    shared,
+                    name: jdata.name,
+                    delay: jdata.check_interval,
+                }
+            } else {
+                Executor::Sleeping {
+                    shared,
+                    name,
+                    delay,
                 }
             }
         }
