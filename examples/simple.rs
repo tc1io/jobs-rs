@@ -1,13 +1,13 @@
 use async_trait::async_trait;
-use jobs::job::Schedule;
-use jobs::repos::pickledb::Repo;
-use jobs::Result;
-use jobs::{job::JobAction, manager::JobManager, repos};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{Deserialize, Serialize};
 use std::process;
 use std::sync::{Arc, Mutex};
 use tokio::time::{sleep, Duration};
+
+use jobs::PickleDbRepo;
+use jobs::Result;
+use jobs::{JobAction, JobConfig, JobManager, Schedule};
 
 #[tokio::main]
 async fn main() {
@@ -17,19 +17,13 @@ async fn main() {
         PickleDbDumpPolicy::AutoDump,
         SerializationMethod::Json,
     );
-    let lock_client = PickleDb::new(
-        "lock.db",
-        PickleDbDumpPolicy::AutoDump,
-        SerializationMethod::Json,
-    );
     let project_db = PickleDb::load(
         "project.db",
         PickleDbDumpPolicy::AutoDump,
         SerializationMethod::Json,
     )
     .unwrap();
-    let db_repo = repos::pickledb::Repo::new(db_client);
-    let lock_repo = repos::pickledb::Repo::new(lock_client);
+    let db_repo = PickleDbRepo::new(db_client);
 
     let job = JobImplementer {
         db: Arc::new(Mutex::new(project_db)),
@@ -37,21 +31,20 @@ async fn main() {
 
     let pid = process::id();
 
-    let mut manager = JobManager::<Repo, Repo>::new(pid.to_string(), db_repo, lock_repo);
+    let mut manager = JobManager::<PickleDbRepo>::new(pid.to_string(), db_repo);
+
     manager.register(
-        String::from("project-updater"),
+        JobConfig::new("project-updater", Schedule::minutely()),
         job.clone(),
-        Schedule {
-            expr: "0 * * * * *".to_string(),
-        },
     );
     let _ = manager.start_all().await.unwrap();
-    sleep(Duration::from_secs(4)).await;
-    manager
-        .stop_by_name(String::from("project-updater"))
-        .await
-        .unwrap();
-    sleep(Duration::from_secs(30)).await;
+    sleep(Duration::from_secs(120)).await;
+
+    // manager
+    //     .stop_by_name(String::from("project-updater"))
+    //     .await
+    //     .unwrap();
+    // sleep(Duration::from_secs(30)).await;
 }
 
 #[derive(Clone)]
