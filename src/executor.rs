@@ -1,5 +1,5 @@
 use crate::job::{JobAction, JobConfig, JobData, JobName, LockStatus, Repo};
-use crate::Result;
+use crate::{Error, Result};
 use chrono::Utc;
 use log::{error, trace};
 use std::fmt::{Debug, Formatter};
@@ -151,28 +151,48 @@ async fn on_try_lock<R: Repo>(mut shared: Shared<R>, delay: Duration) -> Executo
     }
 }
 async fn on_run<R: Repo>(mut shared: Shared<R>, jdata: JobData, lock: R::Lock) -> Executor<R> {
-    //let mut cancel_signal_rx = shared.cancel_signal_rx.take().unwrap();
-    let name = jdata.name.clone();
-    if jdata.due(Utc::now()) {
-        let job_fut = shared.action.call(jdata.state);
-        tokio::select! {
-            sxx = job_fut => {
-                match sxx {
-                 Ok(xxx) => {
-                let _x = shared.job_repo.save(jdata.name.clone(), Utc::now(), xxx).await.unwrap();
-                Executor::Sleeping(shared, jdata.check_interval)
-                },
-                Err(_) => Executor::Done,
-                }
-            }
-            _ = lock => {
-                Executor::Done
-            }
-            // _ = &mut cancel_signal_rx => {
-            //     Executor::Done
-            // }
-        }
-    } else {
-        Executor::Sleeping(shared, jdata.check_interval)
+    if !jdata.due(Utc::now()) {
+        return Executor::Sleeping(shared, jdata.check_interval);
     }
+
+    let mut cancel_signal_rx = shared.cancel_signal_rx.take().unwrap();
+    let name = jdata.name.clone();
+    let job_fut = shared.action.call(jdata.state);
+    let select_result = tokio::select! {
+        job_result = job_fut => {
+            match job_result {
+                Ok(state) => {
+                    match shared.job_repo.save(jdata.name.clone(), Utc::now(), state).await {
+                        Ok(()) => RunSelectResult::Success,
+                        Err(e) => RunSelectResult::SaveFailure(e)
+                    }
+                },
+                Err(e) => RunSelectResult::JobFailure(e)
+            }
+        }
+        Err(e) = lock => {
+            RunSelectResult::LockFailure(e)
+        }
+        _ = &mut cancel_signal_rx => {
+            RunSelectResult::Cancaled
+         }
+    };
+
+    shared.cancel_signal_rx = Some(cancel_signal_rx);
+    // TODO refine all the Done cases to proper sleeps + backoff
+    match select_result {
+        RunSelectResult::Success => Executor::Sleeping(shared, jdata.check_interval),
+        RunSelectResult::JobFailure(_) => Executor::Done,
+        RunSelectResult::LockFailure(_) => Executor::Done,
+        RunSelectResult::SaveFailure(_) => Executor::Done,
+        RunSelectResult::Cancaled => Executor::Done,
+    }
+}
+
+enum RunSelectResult {
+    Success,
+    JobFailure(Error),
+    LockFailure(Error),
+    SaveFailure(Error),
+    Cancaled,
 }
