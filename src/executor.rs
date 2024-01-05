@@ -6,13 +6,11 @@ use std::fmt::{Debug, Formatter};
 use tokio::sync::oneshot::Receiver;
 use tokio::time::{sleep, Duration};
 
-const TAKE_OK: &str = "cancel channel should be available, else we have a logic error";
-
 pub struct Shared<JR> {
     instance: String,
     name: JobName,
     repo: JR,
-    cancel: Option<Receiver<()>>,
+    cancel: Receiver<()>,
     action: Box<dyn JobAction + Send + Sync>,
 }
 
@@ -54,7 +52,7 @@ impl<J: Repo + Clone + Send + Sync> Executor<J> {
                 instance,
                 name: data.name.clone(),
                 repo: job_repo,
-                cancel: Some(cancel),
+                cancel,
                 action,
             },
             JobData::from(data),
@@ -84,16 +82,14 @@ async fn on_initial<R: Repo>(shared: Shared<R>, jdata: JobData, delay: Duration)
 }
 
 async fn on_sleeping<R: Repo>(mut shared: Shared<R>, delay: Duration) -> Executor<R> {
-    let mut cancel = shared.cancel.take().expect(TAKE_OK);
     let done = tokio::select! {
         _ = sleep(delay) =>  false,
-        _ = &mut cancel => true
+        _ = &mut shared.cancel => true
     };
 
     if done {
         Executor::Done
     } else {
-        shared.cancel = Some(cancel);
         Executor::CheckDue(shared, delay)
     }
 }
@@ -166,7 +162,6 @@ async fn on_run<R: Repo>(mut shared: Shared<R>, jdata: JobData, lock: R::Lock) -
         return Executor::Sleeping(shared, jdata.check_interval);
     }
 
-    let mut cancel = shared.cancel.take().expect(TAKE_OK);
     let job_fut = shared.action.call(jdata.state);
     let select_result = tokio::select! {
         job_result = job_fut => {
@@ -183,12 +178,11 @@ async fn on_run<R: Repo>(mut shared: Shared<R>, jdata: JobData, lock: R::Lock) -
         Err(e) = lock => {
             RunSelectResult::LockFailure(e)
         }
-        _ = &mut cancel => {
+        _ = &mut shared.cancel => {
             RunSelectResult::Cancaled
          }
     };
 
-    shared.cancel = Some(cancel);
     // TODO refine all the Done cases to proper sleeps + backoff
     match select_result {
         RunSelectResult::Success => Executor::Sleeping(shared, jdata.check_interval),
