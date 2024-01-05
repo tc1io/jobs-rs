@@ -29,3 +29,5 @@ example.db*
 project.db
 lock.db
 /.idea/
+counter.db
+jobs.db

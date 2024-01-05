@@ -165,8 +165,8 @@ impl Repo for MongoRepo {
             .return_document(Some(ReturnDocument::After))
             .build();
 
-        //let filter_doc = doc! {"_id":name.as_str(), "expires": {"$lt" : "78238723"}  };
-        let filter_doc = doc! {"_id":name.as_str()  };
+        let filter_doc = doc! {"_id":name.as_str(), "expires": {"$lt" : Utc::now().timestamp()}  };
+        // let filter_doc = doc! {"_id":name.as_str()  };
 
         let update_doc = doc! { "$set": doc! {
             "owner": owner,
@@ -216,7 +216,10 @@ impl Repo for MongoRepo {
                     Err(e) => Err(e),
                 }
             }
-            Ok(None) => Err(Error::TODO),
+            Ok(None) => {
+                trace!("lock already acquired");
+                Ok(LockStatus::AlreadyLocked)
+            },
             Err(e) => Err(Error::Repo(e.to_string())),
         }
     }
