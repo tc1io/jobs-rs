@@ -6,11 +6,13 @@ use std::fmt::{Debug, Formatter};
 use tokio::sync::oneshot::Receiver;
 use tokio::time::{sleep, Duration};
 
+const TAKE_OK: &str = "cancel channel should be available, else we have a logic error";
+
 pub struct Shared<JR> {
     instance: String,
     name: JobName,
-    job_repo: JR,
-    cancel_signal_rx: Option<Receiver<()>>,
+    repo: JR,
+    cancel: Option<Receiver<()>>,
     action: Box<dyn JobAction + Send + Sync>,
 }
 
@@ -44,15 +46,15 @@ impl<J: Repo + Clone + Send + Sync> Executor<J> {
         data: JobConfig,
         action: Box<dyn JobAction + Send + Sync>,
         job_repo: J,
-        cancel_signal_rx: Receiver<()>,
+        cancel: Receiver<()>,
         delay: Duration,
     ) -> Self {
         Executor::Initial(
             Shared {
                 instance,
                 name: data.name.clone(),
-                job_repo,
-                cancel_signal_rx: Some(cancel_signal_rx),
+                repo: job_repo,
+                cancel: Some(cancel),
                 action,
             },
             JobData::from(data),
@@ -82,28 +84,28 @@ async fn on_initial<R: Repo>(shared: Shared<R>, jdata: JobData, delay: Duration)
 }
 
 async fn on_sleeping<R: Repo>(mut shared: Shared<R>, delay: Duration) -> Executor<R> {
-    let mut cancel_signal_rx = shared.cancel_signal_rx.take().unwrap();
-    let cancel = tokio::select! {
+    let mut cancel = shared.cancel.take().expect(TAKE_OK);
+    let done = tokio::select! {
         _ = sleep(delay) =>  false,
-        _ = &mut cancel_signal_rx => true
+        _ = &mut cancel => true
     };
 
-    if cancel {
+    if done {
         Executor::Done
     } else {
-        shared.cancel_signal_rx = Some(cancel_signal_rx);
+        shared.cancel = Some(cancel);
         Executor::CheckDue(shared, delay)
     }
 }
 
 async fn on_start<R: Repo>(mut shared: Shared<R>, jdata: JobData) -> Executor<R> {
-    match shared.job_repo.get(jdata.name.clone().into()).await {
+    match shared.repo.get(jdata.name.clone().into()).await {
         Err(e) => {
             error!("get job data: {:?}", e);
             Executor::Initial(shared, jdata, Duration::from_secs(1)) // TODO Backoff
         }
         Ok(None) => {
-            match shared.job_repo.create(jdata.clone()).await {
+            match shared.repo.create(jdata.clone()).await {
                 Err(e) => {
                     error!("create job data: {:?}", e);
                     Executor::Initial(shared, jdata, Duration::from_secs(1)) // TODO Backoff
@@ -117,7 +119,7 @@ async fn on_start<R: Repo>(mut shared: Shared<R>, jdata: JobData) -> Executor<R>
 }
 
 async fn on_check_due<R: Repo>(mut shared: Shared<R>, delay: Duration) -> Executor<R> {
-    match shared.job_repo.get(shared.name.clone()).await {
+    match shared.repo.get(shared.name.clone()).await {
         // TODO split these two cases for clarity
         Err(_) | Ok(None) => Executor::Sleeping(shared, delay), // TODO Retry interval, attempt counter, bbackoff },
         Ok(Some(jdata)) if jdata.due(Utc::now()) => Executor::TryLock(shared, jdata.check_interval),
@@ -126,7 +128,7 @@ async fn on_check_due<R: Repo>(mut shared: Shared<R>, delay: Duration) -> Execut
 }
 async fn on_try_lock<R: Repo>(mut shared: Shared<R>, delay: Duration) -> Executor<R> {
     match shared
-        .job_repo
+        .repo
         .lock(
             shared.name.clone(),
             shared.instance.clone(),
@@ -141,12 +143,21 @@ async fn on_try_lock<R: Repo>(mut shared: Shared<R>, delay: Duration) -> Executo
             Executor::Run(shared, jdata, lock)
         }
         Ok(LockStatus::Acquired(jdata, _)) => {
-            shared
-                .job_repo
+            // We hold the lock but job is not due, so we call save with existing data to
+            // release the lock. Since we do a get lock and due check before even going to
+            // TryLock, this is an edge case only and nt the normal mode of operation.
+            // Usually the job shoud be due when we reach TryLock.
+            match shared
+                .repo
                 .save(jdata.name, jdata.last_run, jdata.state)
                 .await
-                .unwrap();
-            Executor::Sleeping(shared, delay)
+            {
+                Ok(()) => Executor::Sleeping(shared, delay),
+                Err(e) => {
+                    error!("unlock failed in try-lock-but-not-due edge case: {:?}", e);
+                    Executor::Sleeping(shared, delay)
+                }
+            }
         }
     }
 }
@@ -155,14 +166,13 @@ async fn on_run<R: Repo>(mut shared: Shared<R>, jdata: JobData, lock: R::Lock) -
         return Executor::Sleeping(shared, jdata.check_interval);
     }
 
-    let mut cancel_signal_rx = shared.cancel_signal_rx.take().unwrap();
-    let name = jdata.name.clone();
+    let mut cancel = shared.cancel.take().expect(TAKE_OK);
     let job_fut = shared.action.call(jdata.state);
     let select_result = tokio::select! {
         job_result = job_fut => {
             match job_result {
                 Ok(state) => {
-                    match shared.job_repo.save(jdata.name.clone(), Utc::now(), state).await {
+                    match shared.repo.save(jdata.name.clone(), Utc::now(), state).await {
                         Ok(()) => RunSelectResult::Success,
                         Err(e) => RunSelectResult::SaveFailure(e)
                     }
@@ -173,12 +183,12 @@ async fn on_run<R: Repo>(mut shared: Shared<R>, jdata: JobData, lock: R::Lock) -
         Err(e) = lock => {
             RunSelectResult::LockFailure(e)
         }
-        _ = &mut cancel_signal_rx => {
+        _ = &mut cancel => {
             RunSelectResult::Cancaled
          }
     };
 
-    shared.cancel_signal_rx = Some(cancel_signal_rx);
+    shared.cancel = Some(cancel);
     // TODO refine all the Done cases to proper sleeps + backoff
     match select_result {
         RunSelectResult::Success => Executor::Sleeping(shared, jdata.check_interval),

@@ -9,7 +9,6 @@ use log::trace;
 use pickledb::PickleDb;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
-use std::ops::Add;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;

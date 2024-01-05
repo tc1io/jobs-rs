@@ -71,7 +71,7 @@ impl TryFrom<JobDto> for JobData {
                 msg: e.to_string(),
             }
         })?;
-        let state = STANDARD.decode(&value.state).map_err(|e| Error::TODO)?;
+        let state = STANDARD.decode(&value.state).map_err(|_e| Error::TODO)?;
         Ok(Self {
             name: JobName(value._id),
             check_interval: Duration::from_secs(value.check_interval),
@@ -219,7 +219,7 @@ impl Repo for MongoRepo {
             Ok(None) => {
                 trace!("lock already acquired");
                 Ok(LockStatus::AlreadyLocked)
-            },
+            }
             Err(e) => Err(Error::Repo(e.to_string())),
         }
     }
