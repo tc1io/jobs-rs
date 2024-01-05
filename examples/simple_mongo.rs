@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use jobs::job::Schedule;
 use jobs::repos::mongo::MongoRepo;
-use jobs::repos::pickledb::Repo;
+use jobs::repos::pickledb::PickleDbRepo;
 use jobs::{job::JobAction, manager::JobManager, repos};
 use mongodb::bson::doc;
 use mongodb::{bson, Database};
@@ -37,13 +37,13 @@ async fn main() {
     println!("db connection ....");
     // let db = client.database("example");
     let db_repo = repos::mongo::MongoRepo::init("mongodb://localhost:27017".as_ref()).await?;
-    let lock_repo = repos::pickledb::Repo::new(lock_client);
+    let lock_repo = repos::pickledb::PickleDbRepo::new(lock_client);
 
     let job = JobImplementer {
         db: Arc::new(Mutex::new(project_db)),
     };
 
-    let mut manager = JobManager::<MongoRepo, Repo>::new(db_repo, lock_repo);
+    let mut manager = JobManager::<MongoRepo, PickleDbRepo>::new(db_repo, lock_repo);
     manager.register(
         String::from("project-updater"),
         job.clone(),

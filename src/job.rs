@@ -1,99 +1,23 @@
-use crate::job::Status::{Registered, Running};
-use crate::{Error,Result};
+use crate::job::Status::Registered;
+use crate::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use cron::Schedule as CronSchedule;
+use cron::Schedule;
 use derive_more::Into;
+use log::trace;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Display;
-use std::str::FromStr;
-use std::time::{Duration, UNIX_EPOCH};
-use log::trace;
+use std::future::Future;
+use std::time::Duration;
 use tokio::sync::oneshot::Sender;
-use crate::Error::InvalidCronExpression;
-
-#[async_trait]
-pub trait JobAction {
-    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>>;
-}
 
 #[derive(Default, Clone, Into, Eq, Hash, PartialEq, Debug, Serialize, Deserialize)]
 pub struct JobName(pub String);
 
-impl Display for JobName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Debug)]
-pub enum Status {
-    Registered,
-    Suspended,
-    Running(Sender<()>),
-}
-
-pub struct Job {
-    pub name: JobName,
-    pub action: Option<Box<dyn JobAction + Send + Sync>>,
-    pub schedule: Schedule,
-    pub status: Status,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, Default, PartialEq)]
-pub struct Schedule {
-    pub expr: String, // TODO: consider alias
-}
-
-#[derive(Clone, Serialize, Debug, Deserialize, PartialEq)]
-pub struct JobConfig {
-    pub name: JobName,
-    pub check_interval_sec: u64,
-    pub state: Vec<u8>,
-    pub schedule: Schedule,
-    pub enabled: bool,
-    pub last_run: i64,
-}
-
-impl JobConfig {
-    pub fn new(name: JobName, schedule: Schedule) -> Self {
-        JobConfig {
-            name,
-            check_interval_sec: 2, // maybe check every 5sec?
-            state: Default::default(),
-            schedule,
-            enabled: true,
-            last_run: Default::default(),
-        }
-    }
-    pub fn run_job_now(&self) -> Result<bool> {
-        if !self.enabled {
-            trace!("job not enabled");
-            return Ok(false);
-        }
-        if self.last_run.eq(&0) {
-            trace!("last run is 0");
-            return Ok(true);
-        }
-        let last_run =
-            DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_millis(self.last_run as u64));
-        trace!("last run is {}",last_run);
-        let schedule = CronSchedule::from_str(self.schedule.expr.as_str()).map_err(|e| Error::InvalidCronExpression {
-            expression: self.schedule.expr.clone(),
-            msg: e.to_string(),
-        })?;
-        let next_scheduled_run = schedule
-            .after(&last_run)
-            .next()
-            .map_or_else(|| 0, |t| t.timestamp_millis());
-        trace!("next schedule run is {}",next_scheduled_run);
-        if next_scheduled_run.lt(&Utc::now().timestamp_millis()) {
-            trace!("run is due");
-            return Ok(true);
-        }
-        trace!("run is not due");
-        Ok(false)
+impl JobName {
+    pub fn as_str(&self) -> &str {
+        &self.0.as_str()
     }
 }
 
@@ -102,31 +26,151 @@ impl AsRef<str> for JobName {
         self.0.as_str()
     }
 }
-impl Job {
-    pub fn new(
-        name: JobName,
-        action: impl JobAction + Send + Sync + 'static,
-        schedule: Schedule,
-    ) -> Self {
-        Job {
+
+#[derive(Clone)]
+pub struct JobConfig {
+    pub name: JobName,
+    pub check_interval: Duration,
+    pub lock_ttl: Duration,
+    pub schedule: Schedule,
+    pub enabled: bool,
+}
+
+impl JobConfig {
+    pub fn new(name: impl Into<String>, schedule: Schedule) -> Self {
+        JobConfig {
             name: JobName(name.into()),
-            //action: Arc::new(Mutex::new(action)),
-            action: Some(Box::new(action)),
             schedule,
+            check_interval: Duration::from_secs(60),
+            lock_ttl: Duration::from_secs(20),
+            enabled: true,
+        }
+    }
+    pub fn with_check_interval(mut self, interval: Duration) -> Self {
+        self.check_interval = interval;
+        self
+    }
+    pub fn with_lock_ttl(mut self, ttl: Duration) -> Self {
+        self.lock_ttl = ttl;
+        self
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct JobData {
+    pub name: JobName,
+    pub check_interval: Duration,
+    pub lock_ttl: Duration,
+    pub state: Vec<u8>,
+    pub schedule: Schedule,
+    pub enabled: bool,
+    pub last_run: DateTime<Utc>,
+}
+
+impl JobData {
+    pub fn due(&self, now: DateTime<Utc>) -> bool {
+        if !self.enabled {
+            trace!("job not enabled");
+            return false;
+        }
+
+        trace!("last run is {:?}", self.last_run);
+        let next_scheduled_run = self
+            .schedule
+            .after(&self.last_run)
+            .next()
+            .unwrap_or_else(|| DateTime::default());
+        trace!("next schedule run is {:?}", next_scheduled_run);
+        if next_scheduled_run.lt(&now) {
+            trace!("run is due");
+            return true;
+        }
+        trace!("run is not due");
+        false
+    }
+}
+
+impl Display for JobData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "[{} schedule='{}' lastrun={} interval={}s ttl={}s]",
+            self.name.0,
+            self.schedule,
+            self.last_run,
+            self.check_interval.as_secs(),
+            self.lock_ttl.as_secs()
+        )
+    }
+}
+
+impl From<JobConfig> for JobData {
+    fn from(value: JobConfig) -> Self {
+        Self {
+            name: value.name,
+            check_interval: value.check_interval,
+            lock_ttl: value.lock_ttl,
+            state: Vec::default(),
+            schedule: value.schedule,
+            enabled: value.enabled,
+            last_run: DateTime::default(),
+        }
+    }
+}
+
+#[async_trait]
+pub trait JobAction {
+    async fn call(&mut self, state: Vec<u8>) -> Result<Vec<u8>>;
+}
+
+#[derive(Debug)]
+pub(crate) enum Status {
+    Registered,
+    //Suspended,
+    Running(Sender<()>),
+}
+
+pub struct Job {
+    pub data: JobConfig,
+    pub action: Option<Box<dyn JobAction + Send + Sync>>,
+    pub status: Status,
+}
+impl Job {
+    pub fn new(data: JobConfig, action: impl JobAction + Send + Sync + 'static) -> Self {
+        Job {
+            data,
+            action: Some(Box::new(action)),
             status: Registered,
         }
     }
-    pub fn get_registered_or_running(s: &Status) -> bool {
-        match s {
+    pub fn registered(&self) -> bool {
+        match self.status {
             Registered => true,
-            Running(_s) => true,
             _ => false,
         }
     }
 }
+
+pub enum LockStatus<LOCK> {
+    Acquired(JobData, LOCK),
+    AlreadyLocked,
+}
 #[async_trait]
-pub trait JobRepo {
-    async fn create_or_update_job(&mut self, job: JobConfig) -> Result<bool>;
-    async fn get_job(&mut self, name: JobName) -> Result<Option<JobConfig>>;
-    async fn save_state(&mut self, name: JobName, last_run: i64, state: Vec<u8>) -> Result<()>;
+pub trait Repo {
+    type Lock: Future<Output = Result<()>> + Send;
+    // Transactionally create job config entry if it does not exist.
+    async fn create(&mut self, data: JobData) -> Result<()>;
+    // Obtain job data by name without locking
+    async fn get(&mut self, name: JobName) -> Result<Option<JobData>>;
+    // Save state without unlocking so jobs can do intermediate commits.
+    async fn commit(&mut self, name: JobName, state: Vec<u8>) -> Result<()>;
+    // Save the job state after the job ran and release the lock.
+    async fn save(&mut self, name: JobName, last_run: DateTime<Utc>, state: Vec<u8>) -> Result<()>;
+    // Get the job data if the lock can be obtained. Return job data and the lock future.
+    async fn lock(
+        &mut self,
+        name: JobName,
+        owner: String,
+        ttl: Duration,
+    ) -> Result<LockStatus<Self::Lock>>;
 }

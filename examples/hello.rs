@@ -4,7 +4,7 @@ use hyper::{Body, Client};
 use hyper_rustls::HttpsConnector;
 use jobs::manager::JobManager;
 use jobs::repos;
-use jobs::repos::pickledb::Repo;
+use jobs::repos::pickledb::PickleDbRepo;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -49,14 +49,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .unwrap();
 
-    let db_repo = repos::pickledb::Repo::new(db_client);
-    let lock_repo = repos::pickledb::Repo::new(lock_client);
+    let db_repo = repos::pickledb::PickleDbRepo::new(db_client);
+    let lock_repo = repos::pickledb::PickleDbRepo::new(lock_client);
 
     let job = JobImplementer {
         db: Arc::new(Mutex::new(project_db)),
     };
 
-    let mut manager = JobManager::<Repo, Repo>::new(db_repo, lock_repo);
+    let mut manager = JobManager::<PickleDbRepo, PickleDbRepo>::new(db_repo, lock_repo);
     let client: Client<_, Body> = Client::builder().build(https);
 
     // let (tx, rx) = oneshot::channel();
@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 pub fn routes(
     client: Client<HttpsConnector<HttpConnector>, hyper::Body>,
     job: JobImplementer,
-    manager: JobManager<Repo, Repo>,
+    manager: JobManager<PickleDbRepo, PickleDbRepo>,
 ) -> impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     let hello = warp::path("hello")
         .and(warp::get())

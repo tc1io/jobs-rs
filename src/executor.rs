@@ -1,304 +1,310 @@
-use crate::job::Schedule;
-use crate::job::{JobAction, JobConfig, JobName, JobRepo};
-use crate::lock::{LockRepo, LockStatus};
+use crate::job::{JobAction, JobConfig, JobData, JobName, LockStatus, Repo};
 use crate::Result;
 use chrono::Utc;
-use log::trace;
+use log::{error, trace};
 use std::fmt::{Debug, Formatter};
 use tokio::sync::oneshot::Receiver;
 use tokio::time::{sleep, Duration};
 
-pub struct Repos<JR, LR> {
+pub struct Shared<JR> {
     instance: String,
     job_repo: JR,
-    lock_repo: LR,
     cancel_signal_rx: Option<Receiver<()>>,
     action: Box<dyn JobAction + Send + Sync>,
 }
 
-pub enum Executor<JR, LR: LockRepo> {
+pub enum Executor<JR: Repo> {
     InitialDelay {
-        repos: Repos<JR, LR>,
-        job_config: JobConfig,
+        shared: Shared<JR>,
+        jdata: JobData,
         delay: Duration,
     },
     Sleeping {
-        repos: Repos<JR, LR>,
+        shared: Shared<JR>,
         name: JobName,
-        d: Duration,
+        delay: Duration,
     },
     Start {
-        repos: Repos<JR, LR>,
-        job_config: JobConfig,
+        shared: Shared<JR>,
+        jdata: JobData,
+    },
+    CheckDue {
+        shared: Shared<JR>,
+        name: JobName,
+        delay: Duration,
     },
     TryLock {
-        repos: Repos<JR, LR>,
+        shared: Shared<JR>,
         name: JobName,
+        delay: Duration,
     },
     Run {
-        repos: Repos<JR, LR>,
-        name: JobName,
-        lock: LR::Lock,
+        shared: Shared<JR>,
+        jdata: JobData,
+        lock: JR::Lock,
     },
     Done,
 }
 
-impl<JR, LR: LockRepo> Debug for Executor<JR, LR> {
+impl<JR: Repo> Debug for Executor<JR> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Executor::InitialDelay { .. } => {
-                f.write_str("------------------------------------ initial")
-            }
-            Executor::Sleeping { .. } => {
-                f.write_str("------------------------------------ sleeping")
-            }
+            Executor::InitialDelay { .. } => f.write_str("--------------------------- initial"),
+            Executor::Sleeping { .. } => f.write_str("--------------------------- sleeping"),
             Executor::Start { .. } => f.write_str("------------------------------------ start"),
             Executor::TryLock { .. } => f.write_str("------------------------------------ trylock"),
+            Executor::CheckDue { .. } => {
+                f.write_str("------------------------------------ CheckDue")
+            }
             Executor::Run { .. } => f.write_str("------------------------------------ run"),
             Executor::Done => f.write_str("------------------------------------ done"),
         }
     }
 }
 
-impl<J: JobRepo + Clone + Send + Sync, L: LockRepo + Clone + Send + Sync> Executor<J, L> {
+impl<J: Repo + Clone + Send + Sync> Executor<J> {
     pub fn new(
         instance: String,
-        job_name: JobName,
+        data: JobConfig,
         action: Box<dyn JobAction + Send + Sync>,
-        schedule: Schedule,
         job_repo: J,
-        lock_repo: L,
         cancel_signal_rx: Receiver<()>,
         delay: Duration,
     ) -> Self {
         Executor::InitialDelay {
-            repos: Repos {
+            shared: Shared {
                 instance,
                 job_repo,
-                lock_repo,
                 cancel_signal_rx: Some(cancel_signal_rx),
                 action,
             },
-            job_config: JobConfig::new(job_name, schedule),
+            jdata: JobData::from(data),
             delay,
         }
     }
 
     pub async fn run(mut self) -> Result<()> {
         loop {
-            trace!("loop");
-            dbg!(&self);
+            trace!("loop {:?}", self);
             self = match self {
                 Self::InitialDelay {
-                    repos,
-                    job_config,
+                    shared,
+                    jdata,
                     delay,
-                } => {
-                    sleep(delay).await;
-                    Self::Start { repos, job_config }
-                }
-                Self::Start {
-                    mut repos,
-                    job_config,
-                } => match repos.job_repo.get_job(job_config.name.clone().into()).await {
-                    Err(_) => todo!(), //TODO error sleep state  Self::Start { repos, job_config },
-                    Ok(None) => {
-                        match repos
-                            .job_repo
-                            .create_or_update_job(job_config.clone())
-                            .await
-                        {
-                            Err(e) => panic!("{:?}", e), //Self::Start { repos, job_config },
-                            Ok(_) => Self::TryLock {
-                                repos,
-                                name: job_config.name.clone(),
-                            },
-                        }
-                    }
-                    Ok(Some(job_config)) => {
-                        trace!("OK ....jc: {:?}", job_config);
-                        if job_config.run_job_now().unwrap() {
-                            Self::TryLock {
-                                repos,
-                                name: job_config.name,
-                            }
-                        } else {
-                            trace!("Not time yet, to run job again - sleeping again");
-                            Self::Sleeping {
-                                repos,
-                                name: job_config.name,
-                                d: Duration::from_secs(10),
-                            }
-                        }
-                    }
-                },
-                Self::Sleeping { mut repos, name, d } => {
-                    let mut cancel_signal_rx = repos.cancel_signal_rx.take().unwrap();
-
-                    tokio::select! {
-                        _ = sleep(d) => {
-                            println!("do_stuff_async() completed first");
-                            Self::TryLock { repos, name }
-                        }
-                        _ = &mut cancel_signal_rx => {
-                            println!("more_async_work() completed first");
-                            Self::Done
-                        }
-                    }
-                }
-
-                //     println!("START");
-                //     match ex.cancel_signal_rx.try_recv() {
-                //         Ok(_) => {
-                //             return Ok(None);
-                //         }
-                //         Err(_e) => {}
-                //     }
-                //     interval.tick().await;
-                //     Ok(Some(Create {
-                //         job_config: ex.job_config.clone(),
-                //     }))
-                // }
-                Self::TryLock { mut repos, name } => {
-                    let instance = repos.instance.clone(); // try to avoid
-                                                           // TOD no hardcoed ttl here
-                    match repos
-                        .lock_repo
-                        .acquire_lock(name.clone(), instance, Duration::from_secs(10))
-                        .await
-                    {
-                        Err(_) => Self::Sleeping {
-                            repos,
-                            name,
-                            d: Duration::from_secs(10),
-                        },
-                        Ok(LockStatus::AlreadyLocked) => Self::Sleeping {
-                            repos,
-                            name,
-                            d: Duration::from_secs(10),
-                        },
-                        Ok(LockStatus::Acquired(lock)) => Self::Run { repos, name, lock },
-                    }
-                }
+                } => on_initial_delay(shared, jdata, delay).await,
+                Self::Start { shared, jdata } => on_start(shared, jdata).await,
+                Self::Sleeping {
+                    shared,
+                    name,
+                    delay,
+                } => on_sleeping(shared, name, delay).await,
+                Self::CheckDue {
+                    shared,
+                    name,
+                    delay,
+                } => on_check_due(shared, name, delay).await,
+                Self::TryLock {
+                    shared,
+                    name,
+                    delay,
+                } => on_try_lock(shared, name, delay).await,
 
                 Self::Run {
-                    mut repos,
-                    name,
+                    shared,
+                    jdata,
                     lock,
-                } => {
-                    let job_config = repos.job_repo.get_job(name.clone()).await?.unwrap();
-                    let mut cancel_signal_rx = repos.cancel_signal_rx.take().unwrap();
-                    if job_config.run_job_now().unwrap() {
-                        let job_fut = repos.action.call(job_config.state);
-                        tokio::select! {
-                            sxx = job_fut => {
-                                match sxx {
-                                 Ok(xxx) => {
-                                let last_run = Utc::now().timestamp_millis();
-                                let _x = repos.job_repo.save_state(name.clone(), last_run, xxx).await.unwrap();
-                                Self::Sleeping {
-                                    repos,
-                                    name,
-                                    d: Duration::from_secs(10),
-                                }
-                                },
-                                Err(_) => Self::Done,
-                                }
-                            }
-                            _ = lock => {
-                                repos
-                                .lock_repo
-                                .release_lock(name.clone())
-                                .await;
-                                Self::Done
-                            }
-                            _ = &mut cancel_signal_rx => {
-                                println!("more_async_work() completed first");
-                                repos
-                                .lock_repo
-                                .release_lock(name.clone())
-                                .await;
-                                Self::Done
-                            }
-                        }
-                    } else {
-                        Self::Sleeping {
-                            repos,
-                            name,
-                            d: Duration::from_secs(10),
-                        }
-                    }
-                }
-                Self::Done => break,
+                } => on_run(shared, jdata, lock).await,
+                Self::Done => return Ok(()),
             }
         }
-        Ok(())
     }
 }
 
-//
-// if job_config.clone().run_job_now()? {
-//     let name = job_config.clone().name;
-//     let mut lock_data = ex.lock_data.clone();
-//     lock_data.expires = (Utc::now().timestamp_millis() as u64)
-//         .add(lock_data.ttl.as_millis() as u64);
-//     if ex.lock_repo.acquire_lock(name.clone(), lock_data).await? {
-//         let refresh_lock_fut = ex.lock_repo.refresh_lock(name.clone());
-//         let mut action = ex.action.lock().await;
-//         let job_fut = action.call(job_config.state);
-//         tokio::select! {
-//                 refreshed = refresh_lock_fut => {
-//                 match refreshed {
-//                     Ok(_x) => Ok(()),
-//                     Err(e) => Err(anyhow!(e)),
-//                     }
-//                 }
-//                 state = job_fut => {
-//                 match state {
-//                     Ok(s) => {
-//                         let last_run = Utc::now().timestamp_millis();
-//                         let _x = ex.job_repo.save_state(name, last_run, s).await?;
-//                         ex.job_config.last_run = last_run;
-//                         Ok(())
-//                     }
-//                     Err(e) => Err(anyhow!(e)),
-//                 }
-//             }
-//         }?;
-//     }
-// }
+async fn on_initial_delay<R: Repo>(
+    shared: Shared<R>,
+    jdata: JobData,
+    delay: Duration,
+) -> Executor<R> {
+    sleep(delay).await;
+    Executor::Start { shared, jdata }
+}
 
-// println!("RUN");
-// let job_config = repos.job_repo.get_job(name.clone()).await?.unwrap();
-//
-// if job_config.clone().run_job_now()? {
-// let name = job_config.clone().name;
-// let mut lock_data = ex.lock_data.clone();
-// lock_data.expires = (Utc::now().timestamp_millis() as u64)
-// .add(lock_data.ttl.as_millis() as u64);
-// if ex.lock_repo.acquire_lock(name.clone(), lock_data).await? {
-// let refresh_lock_fut = ex.lock_repo.refresh_lock(name.clone());
-// let mut action = ex.action.lock().await;
-// let job_fut = action.call(job_config.state);
-// tokio::select! {
-// refreshed = refresh_lock_fut => {
-// match refreshed {
-// Ok(_x) => Ok(()),
-// Err(e) => Err(anyhow!(e)),
-// }
-// }
-// state = job_fut => {
-// match state {
-// Ok(s) => {
-// let last_run = Utc::now().timestamp_millis();
-// let _x = ex.job_repo.save_state(name, last_run, s).await?;
-// ex.job_config.last_run = last_run;
-// Ok(())
-// }
-// Err(e) => Err(anyhow!(e)),
-// }
-// }
-// }?;
-// }
-// }
-// }
+async fn on_sleeping<R: Repo>(
+    mut shared: Shared<R>,
+    name: JobName,
+    delay: Duration,
+) -> Executor<R> {
+    let mut cancel_signal_rx = shared.cancel_signal_rx.take().unwrap();
+
+    let cancel = tokio::select! {
+        _ = sleep(delay) =>  false,
+        _ = &mut cancel_signal_rx => true
+    };
+
+    if cancel {
+        Executor::Done
+    } else {
+        shared.cancel_signal_rx = Some(cancel_signal_rx);
+        Executor::CheckDue {
+            shared,
+            name,
+            delay,
+        }
+    }
+}
+
+async fn on_start<R: Repo>(mut shared: Shared<R>, jdata: JobData) -> Executor<R> {
+    match shared.job_repo.get(jdata.name.clone().into()).await {
+        Err(e) => {
+            error!("get job data: {:?}", e);
+            Executor::InitialDelay {
+                shared,
+                jdata,
+                delay: Duration::from_secs(1),
+            } // TODO Backoff
+        }
+        Ok(None) => {
+            match shared.job_repo.create(jdata.clone()).await {
+                Err(e) => {
+                    error!("create job data: {:?}", e);
+                    Executor::InitialDelay {
+                        shared,
+                        jdata,
+                        delay: Duration::from_secs(1),
+                    } // TODO Backoff
+                }
+                // TODO here should be a due() check
+                Ok(()) => Executor::TryLock {
+                    shared,
+                    name: jdata.name,
+                    delay: jdata.check_interval,
+                },
+            }
+        }
+        Ok(Some(jdata)) => {
+            trace!("Start({})", jdata);
+            if jdata.due(Utc::now()) {
+                Executor::TryLock {
+                    shared,
+                    name: jdata.name,
+                    delay: jdata.check_interval,
+                }
+            } else {
+                Executor::Sleeping {
+                    shared,
+                    name: jdata.name,
+                    delay: jdata.check_interval,
+                }
+            }
+        }
+    }
+}
+async fn on_check_due<R: Repo>(
+    mut shared: Shared<R>,
+    name: JobName,
+    delay: Duration,
+) -> Executor<R> {
+    match shared.job_repo.get(name.clone()).await {
+        Err(_) | Ok(None) => Executor::Sleeping {
+            // TODO split these two cases for clarity
+            shared,
+            name,
+            delay, // TODO Retry interval, attempt counter, bbackoff
+        },
+        Ok(Some(jdata)) => {
+            trace!("CheckDue({})", jdata);
+            if jdata.due(Utc::now()) {
+                Executor::TryLock {
+                    shared,
+                    name: jdata.name,
+                    delay: jdata.check_interval,
+                }
+            } else {
+                Executor::Sleeping {
+                    shared,
+                    name,
+                    delay,
+                }
+            }
+        }
+    }
+}
+async fn on_try_lock<R: Repo>(
+    mut shared: Shared<R>,
+    name: JobName,
+    delay: Duration,
+) -> Executor<R> {
+    let instance = shared.instance.clone(); // try to avoid
+    match shared
+        .job_repo
+        .lock(name.clone(), instance, Duration::from_secs(10))
+        .await
+    {
+        // TODO use duration from jobdata
+        Err(_) => Executor::Sleeping {
+            shared,
+            name,
+            delay, // TODO Retry interval, attempt counter, bbackoff
+        },
+        Ok(LockStatus::AlreadyLocked) => Executor::Sleeping {
+            shared,
+            name,
+            delay,
+        },
+        Ok(LockStatus::Acquired(jdata, lock)) => {
+            trace!("TryLock({})", jdata);
+            if jdata.due(Utc::now()) {
+                Executor::Run {
+                    shared,
+                    jdata,
+                    lock,
+                }
+            } else {
+                shared
+                    .job_repo
+                    .save(jdata.name, jdata.last_run, jdata.state)
+                    .await
+                    .unwrap();
+                Executor::Sleeping {
+                    shared,
+                    name,
+                    delay,
+                }
+            }
+        }
+    }
+}
+async fn on_run<R: Repo>(mut shared: Shared<R>, jdata: JobData, lock: R::Lock) -> Executor<R> {
+    //let mut cancel_signal_rx = shared.cancel_signal_rx.take().unwrap();
+    let name = jdata.name.clone();
+    if jdata.due(Utc::now()) {
+        let job_fut = shared.action.call(jdata.state);
+        tokio::select! {
+            sxx = job_fut => {
+                match sxx {
+                 Ok(xxx) => {
+                let _x = shared.job_repo.save(jdata.name.clone(), Utc::now(), xxx).await.unwrap();
+                Executor::Sleeping {
+                    shared,
+                    name,
+                    delay: jdata.check_interval,
+                }
+                },
+                Err(_) => Executor::Done,
+                }
+            }
+            _ = lock => {
+                Executor::Done
+            }
+            // _ = &mut cancel_signal_rx => {
+            //     Executor::Done
+            // }
+        }
+    } else {
+        Executor::Sleeping {
+            shared,
+            name,
+            delay: jdata.check_interval,
+        }
+    }
+}

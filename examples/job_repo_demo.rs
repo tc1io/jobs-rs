@@ -1,4 +1,4 @@
-use jobs::job::{Job, JobConfig, JobName, JobRepo, Schedule};
+use jobs::job::{Job, JobData, JobName, Repo, Schedule};
 use jobs::lock::{LockData, LockRepo};
 use jobs::repos;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
@@ -10,11 +10,11 @@ async fn main() {
         PickleDbDumpPolicy::AutoDump,
         SerializationMethod::Json,
     );
-    let mut repo = repos::pickledb::Repo::new(db);
+    let mut repo = repos::pickledb::PickleDbRepo::new(db);
     let job_name = JobName("test".to_string());
     let job_name1 = job_name.clone();
 
-    repo.create_or_update_job(JobConfig {
+    repo.create_or_update_job(JobData {
         // name: JobName { name: "dummy".to_string() },
         name: job_name.clone(),
         check_interval_sec: 0,
